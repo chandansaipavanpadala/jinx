@@ -37,6 +37,12 @@ async function boot() {
   if (!setupMode && emailEl && appConfig.auth.prefillLoginEmail && appConfig.auth.seedEmail) {
     emailEl.value = appConfig.auth.seedEmail;
   }
+
+  if (setupMode && !appConfig.auth.allowSeedUser) {
+    showError(
+      'First visit on this site: create your workstation profile below (local dev passwords do not apply here).',
+    );
+  }
 }
 
 boot();

@@ -111,7 +111,9 @@ export const AuthService = {
   async login({ email, password, remember = false }) {
     const user = db().users.getUser();
     if (!user) {
-      throw new Error('No account found. Create your workstation profile first.');
+      throw new Error(
+        'No account on this browser yet. Use “Create your profile” on the login page (hosted site data is separate from localhost).',
+      );
     }
     const normalizedEmail = email.trim().toLowerCase();
     if (normalizedEmail !== user.email) {

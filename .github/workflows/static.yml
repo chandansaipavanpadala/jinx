@@ -43,6 +43,10 @@ jobs:
 
       - name: Build
         run: npm run build
+        # Demo login is defined in .env.production (committed for GitHub Pages).
+        # To override the password in CI, add secret JINX_DEMO_PASSWORD and uncomment:
+        # env:
+        #   VITE_SEED_PASSWORD: ${{ secrets.JINX_DEMO_PASSWORD }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
