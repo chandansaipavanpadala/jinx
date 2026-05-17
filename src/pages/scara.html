@@ -43,14 +43,14 @@
         <div class="sidebar-section">
           <div class="sidebar-section-header">SCENE HIERARCHY</div>
           <div class="sidebar-section-body" style="padding: 0;">
-            <div class="tree-item"><span class="tree-icon">⛒</span> WORLD ORIGIN</div>
-            <div class="tree-item" data-link="0"><span class="tree-icon">⚙</span> JOINT 1 <span class="badge" id="tree-t1">0.00°</span></div>
-            <div class="tree-item" data-link="1"><span class="tree-icon">🔗</span> LINK 1 (SHOULDER)</div>
-            <div class="tree-item" data-link="1"><span class="tree-icon">⚙</span> JOINT 2 <span class="badge" id="tree-t2">0.00°</span></div>
-            <div class="tree-item" data-link="2"><span class="tree-icon">🔗</span> LINK 2 (ELBOW)</div>
-            <div class="tree-item" data-link="2"><span class="tree-icon">⇕</span> JOINT 3 <span class="badge" id="tree-t3">0.00m</span></div>
-            <div class="tree-item" data-link="3"><span class="tree-icon">⚙</span> JOINT 4 <span class="badge" id="tree-t4">0.00°</span></div>
-            <div class="tree-item active"><span class="tree-icon">🎯</span> END EFFECTOR</div>
+            <div class="tree-item"><span class="tree-icon">O</span> WORLD ORIGIN</div>
+            <div class="tree-item" data-link="0"><span class="tree-icon">J</span> JOINT 1 <span class="badge" id="tree-t1">0.00°</span></div>
+            <div class="tree-item" data-link="1"><span class="tree-icon">L</span> LINK 1 (SHOULDER)</div>
+            <div class="tree-item" data-link="1"><span class="tree-icon">J</span> JOINT 2 <span class="badge" id="tree-t2">0.00°</span></div>
+            <div class="tree-item" data-link="2"><span class="tree-icon">L</span> LINK 2 (ELBOW)</div>
+            <div class="tree-item" data-link="2"><span class="tree-icon">P</span> JOINT 3 <span class="badge" id="tree-t3">0.00m</span></div>
+            <div class="tree-item" data-link="3"><span class="tree-icon">J</span> JOINT 4 <span class="badge" id="tree-t4">0.00°</span></div>
+            <div class="tree-item active"><span class="tree-icon">E</span> END EFFECTOR</div>
           </div>
         </div>
       </aside>
@@ -76,14 +76,14 @@
         
         <!-- Click hint overlay for interactive mode -->
         <div id="clickHint" style="display:none; position:absolute; bottom:16px; left:50%; transform:translateX(-50%); background:var(--bg-panel); border:1px solid var(--accent); padding:8px 16px; border-radius:3px; color:var(--text); font-size:12px;">
-          🖱️ Click table to set <strong>Pick</strong>, then click again for <strong>Drop</strong>
+          Click table to set <strong>Pick</strong>, then click again for <strong>Drop</strong>
         </div>
         
         <!-- Context Popup (Link Resizer) -->
         <div class="context-popup" id="linkCard">
           <div class="context-header">
             <span id="linkCardTitle">Link</span>
-            <button class="context-close" id="linkCardClose">✕</button>
+            <button class="context-close" id="linkCardClose">X</button>
           </div>
           <div class="context-body">
             <div class="inspector-row">
@@ -169,7 +169,7 @@
     <!-- STATUS BAR (Bottom) -->
     <footer class="status-bar">
       <div class="status-item">
-        <span class="status-accent">●</span> SYSTEM READY
+        <span class="status-accent">*</span> SYSTEM READY
       </div>
       <div class="status-sep"></div>
       <div class="status-item">

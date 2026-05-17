@@ -4,18 +4,68 @@ A browser-based, real-time 3D simulator for exploring robotic manipulator
 kinematics, Jacobian analysis, singularity detection, and task-space trajectory
 planning. Built with Three.js, vanilla JavaScript, and Vite.
 
+**Live demo (GitHub Pages):**  
+[https://chandansaipavanpadala.github.io/JINX-Joint_Inverse_N-dimensional_eXplorer/](https://chandansaipavanpadala.github.io/JINX-Joint_Inverse_N-dimensional_eXplorer/)
+
+| Demo sign-in (hosted build) | |
+|---|---|
+| Email | `admin@jinx.local` |
+| Password | `Jinx@2026` |
+
+> Hosted accounts are stored in your browser only (not on a server). Local `npm run dev` credentials use the same demo values from `.env.development`.
+
+---
+
+## Screenshots
+
+### Sign-in & workspace launcher
+
+Secure workstation login and the main hub for opening robot simulators.
+
+| Login | Workspace launcher |
+|:---:|:---:|
+| ![Sign in to JINX](docs/screenshots/01-login.png) | ![Workspace launcher](docs/screenshots/02-launcher.png) |
+
+### 3-DOF RRR shadow lamp
+
+Closed-form IK, Jacobian diagnostics, shadow-avoidance demo, and pinhole camera model.
+
+![RRR shadow lamp workspace](docs/screenshots/03-rrr-workspace.png)
+
+### 4-DOF SCARA pick & place
+
+DLS inverse kinematics, pick-and-place automation, link resizing, and **RoboAnalyzer** (DH editor, workspace sampling, joint paths).
+
+| SCARA workspace | RoboAnalyzer panel |
+|:---:|:---:|
+| ![SCARA workspace](docs/screenshots/04-scara-workspace.png) | ![SCARA RoboAnalyzer](docs/screenshots/05-scara-analyzer.png) |
+
+### 6-DOF welding cell
+
+Waypoint paths, welding task execution, and spark effects.
+
+![6-DOF welder workspace](docs/screenshots/06-welder-workspace.png)
+
+### Math dashboard
+
+Cross-tab FK / IK / Jacobian analytics with Chart.js telemetry (synced via `BroadcastChannel`).
+
+![Math dashboard for SCARA](docs/screenshots/07-math-dashboard.png)
+
 ---
 
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Supported Robot Configurations](#supported-robot-configurations)
-3. [Core Architecture](#core-architecture)
-4. [Mathematical Foundations](#mathematical-foundations)
-5. [Math Dashboard](#math-dashboard)
-6. [Directory Structure](#directory-structure)
-7. [Local Development Setup](#local-development-setup)
-8. [License](#license)
+2. [Screenshots](#screenshots)
+3. [Supported Robot Configurations](#supported-robot-configurations)
+4. [Core Architecture](#core-architecture)
+5. [Mathematical Foundations](#mathematical-foundations)
+6. [Math Dashboard](#math-dashboard)
+7. [Directory Structure](#directory-structure)
+8. [Local Development Setup](#local-development-setup)
+9. [GitHub Pages Deployment](#github-pages-deployment)
+10. [License](#license)
 
 ---
 
@@ -32,6 +82,8 @@ The simulator runs entirely in the browser and supports:
 - Pinhole camera model with intrinsic/extrinsic parameter tuning
 - Pick-and-place task automation with finite state machine control
 - Waypoint-based trajectory planning for welding path execution
+- **RoboAnalyzer** workbench on SCARA (DH model, workspace slice, joint-space paths)
+- Modular persistence layer (users, sessions, workspaces) via `src/database/`
 - Inter-tab communication via BroadcastChannel for live math dashboard sync
 - Interactive link resizing with real-time kinematic mesh updates
 - Real-time 3D rendering with PBR materials, shadow mapping, and environment lighting
@@ -43,11 +95,11 @@ The simulator runs entirely in the browser and supports:
 | Configuration              | DOF | Joint Types | Key Features                                      |
 |----------------------------|-----|-------------|---------------------------------------------------|
 | 3-DOF RRR Desk Lamp        | 3   | RRR         | Closed-form IK, occlusion avoidance, camera model |
-| 4-DOF SCARA Arm             | 4   | RRPR        | DLS IK, pick-and-place FSM, link resizing         |
+| 4-DOF SCARA Arm             | 4   | RRPR        | DLS IK, pick-and-place FSM, RoboAnalyzer, link resize |
 | 6-DOF Welding Robot         | 6   | 6R          | DLS IK, welding spark effects, waypoint paths     |
 
 All three configurations share a unified N-DOF kinematics engine
-(`KinematicsNDOF.js`) that computes forward kinematics, the 6xN geometric
+(`KinematicsNDOF.js`) that computes forward kinematics, the 6×N geometric
 Jacobian, and damped least-squares inverse kinematics for arbitrary serial
 chains defined by standard DH parameter tables.
 
@@ -55,19 +107,20 @@ chains defined by standard DH parameter tables.
 
 ## Core Architecture
 
-The codebase follows a strict separation of concerns across four layers:
+The codebase follows a strict separation of concerns:
 
 ```
-index.html                          Landing page (robot selector)
-src/pages/rrr-lamp.html             3-DOF RRR lamp simulator
-src/pages/scara.html                4-DOF SCARA arm simulator
-src/pages/welder.html               6-DOF welding robot simulator
-src/pages/math-dashboard.html       Live math dashboard (cross-tab)
-src/math/                           Pure mathematical functions (zero DOM)
-src/core/                           3D scene management (Three.js)
-src/ui/                             DOM event handling, HUD, simulation loop
-src/logic/                          Task automation (FSM, waypoints, welding)
-public/                             Static assets (CSS, icons)
+index.html / login.html           Auth + workspace launcher
+src/pages/*.html                  Per-robot simulator pages
+src/math/                         Pure kinematics (no DOM)
+src/core/                         Three.js scene managers
+src/ui/                           HUD, panels, controllers
+src/model/ + src/analysis/        Robot definitions + RoboAnalyzer
+src/database/                     Storage drivers + repositories
+src/logic/                        Task FSMs (pick-place, welding, waypoints)
+src/config/                       App config (Vite env)
+public/                           CSS, images, static assets
+docs/screenshots/                 README gallery images
 ```
 
 ### Data Flow
@@ -95,10 +148,6 @@ public/                             Static assets (CSS, icons)
        |
        v
   Math Dashboard (separate tab)          [src/pages/math-dashboard.html]
-       |
-       +---> Real-time FK, IK, Jacobian matrix display
-       +---> Chart.js analytics (error, velocity, manipulability)
-       +---> Bidirectional slider control via 'jinx_math_cmd' channel
 ```
 
 ---
@@ -107,136 +156,62 @@ public/                             Static assets (CSS, icons)
 
 ### Denavit-Hartenberg Convention
 
-All robots use the standard DH convention. Each joint i is parameterized by
-four quantities: link length a_i, link twist alpha_i, link offset d_i, and
-joint angle theta_i. The homogeneous transformation from frame i-1 to frame i
-is the product of four elementary transforms.
+All robots use the standard DH convention. Each joint *i* is parameterized by
+link length *aᵢ*, link twist *αᵢ*, link offset *dᵢ*, and joint angle *θᵢ*.
 
 ### 3-DOF RRR Desk Lamp
 
-| i | a_i (m) | alpha_i | d_i (m) | theta_i   |
-|---|---------|---------|---------|-----------|
-| 1 | 0       | pi/2    | 0.15    | theta_1*  |
-| 2 | 0.30    | 0       | 0       | theta_2*  |
-| 3 | 0.24    | 0       | 0       | theta_3*  |
+| i | aᵢ (m) | αᵢ | dᵢ (m) | θᵢ |
+|---|--------|-----|--------|-----|
+| 1 | 0 | π/2 | 0.15 | θ₁* |
+| 2 | 0.30 | 0 | 0 | θ₂* |
+| 3 | 0.24 | 0 | 0 | θ₃* |
 
-Forward kinematics (closed-form):
-
-```
-r  = L2 * cos(t2) + L3 * cos(t2 + t3)
-x  = r * cos(t1)
-y  = r * sin(t1)
-z  = L1 + L2 * sin(t2) + L3 * sin(t2 + t3)
-```
-
-Inverse kinematics (closed-form geometric):
-
-```
-t1 = atan2(yd, xd)
-r  = sqrt(xd^2 + yd^2),  zp = zd - L1
-C3 = (r^2 + zp^2 - L2^2 - L3^2) / (2 * L2 * L3)
-t3 = atan2(e * sqrt(1 - C3^2), C3)      [e = +/-1 for elbow config]
-t2 = atan2(zp, r) - atan2(L3*sin(t3), L2 + L3*cos(t3))
-```
-
-Returns null when |C3| > 1 (target unreachable).
+Uses closed-form forward and inverse kinematics (`Kinematics.js`).
 
 ### 4-DOF SCARA Arm
 
-| i | a_i (m) | alpha_i | d_i (m) | theta_i   |
-|---|---------|---------|---------|-----------|
-| 1 | 0       | 0       | 0.35    | theta_1*  |
-| 2 | 0.35    | pi      | 0       | theta_2*  |
-| 3 | 0       | 0       | d_3*    | 0         |
-| 4 | 0       | 0       | 0       | theta_4*  |
+| i | aᵢ (m) | αᵢ | dᵢ (m) | θᵢ |
+|---|--------|-----|--------|-----|
+| 1 | 0 | 0 | 0.35 | θ₁* |
+| 2 | 0.35 | π | 0 | θ₂* |
+| 3 | 0 | 0 | d₃* | 0 |
+| 4 | 0 | 0 | 0 | θ₄* |
 
-Uses damped least-squares (DLS) iterative IK with configurable damping
-factor lambda and maximum iteration count.
+Uses damped least-squares (DLS) iterative IK.
 
 ### 6-DOF Welding Robot
 
-| i | a_i (m) | alpha_i | d_i (m) | theta_i   |
-|---|---------|---------|---------|-----------|
-| 1 | 0       | pi/2    | 0.20    | theta_1*  |
-| 2 | 0.30    | 0       | 0       | theta_2*  |
-| 3 | 0       | pi/2    | 0       | theta_3*  |
-| 4 | 0       | -pi/2   | 0.20    | theta_4*  |
-| 5 | 0       | pi/2    | 0       | theta_5*  |
-| 6 | 0       | 0       | 0.08    | theta_6*  |
-
-Uses the same DLS solver. Includes waypoint-based trajectory planning for
-automated welding path execution with spark particle effects.
+Six revolute joints with a spherical wrist; DLS IK and waypoint-based welding paths.
 
 ### Analytical Jacobian
 
-The 6xN geometric Jacobian J(q) maps joint velocities to Cartesian velocities:
-
-```
-[v]     [Jv]
-[w]  =  [Jw] * q_dot
-```
-
-For position-only tasks, the top 3 rows (Jv) are used. The manipulability
-index mu = sqrt(det(Jv * Jv^T)) quantifies proximity to singularities.
-
-Singularity conditions detected:
-
-- Elbow singularity: sin(t3) approaches 0 (arm fully extended or folded)
-- Shoulder singularity: planar reach approaches 0 (arm nearly vertical)
-- Wrist singularity: alignment of wrist axes (6-DOF only)
+The 6×N geometric Jacobian **J(q)** maps joint velocities to Cartesian velocities.
+Manipulability index **μ = √(det(JᵥJᵥᵀ))** indicates proximity to singularities.
 
 ### Damped Least-Squares IK
 
-For N-DOF chains where closed-form solutions are unavailable, the DLS
-iterative solver computes:
-
-```
-delta_q = J^T * (J * J^T + lambda^2 * I)^(-1) * e
-```
-
-where e is the position error vector and lambda is the damping factor that
-prevents instability near singularities.
+**Δq = Jᵀ (J Jᵀ + λ² I)⁻¹ e** for chains without closed-form IK.
 
 ### Trapezoidal Velocity Profile
 
-Joint trajectories use a normalized trapezoidal profile s(t) with three
-phases: acceleration (parabolic ramp), cruise (linear), and deceleration
-(symmetric parabolic ramp). When the motion is too short to reach v_max,
-the profile degrades to a triangular shape.
-
-### Pinhole Camera Model
-
-The perception camera performs inverse projection from pixel coordinates
-to 3D world coordinates using intrinsic parameters (focal length, principal
-point) and an extrinsic transform from camera frame to robot base frame.
+Normalized trapezoidal (or triangular) motion profiles in `Trajectory.js`.
 
 ---
 
 ## Math Dashboard
 
-The Math Dashboard is an independent HTML page that opens in a separate
-browser tab and receives real-time telemetry from any active robot simulator
-via the BroadcastChannel API.
+The Math Dashboard (`src/pages/math-dashboard.html`) opens in a separate tab and
+receives live telemetry from any running simulator via `BroadcastChannel`.
 
-Features:
+- **Forward kinematics** — EE position, joint cards, DH table
+- **Inverse kinematics** — target sliders, convergence error, iteration count
+- **Jacobian** — color-coded matrix, manipulability, singularity warnings
+- **Analytics** — Chart.js error, velocity, and manipulability time series
 
-- **Forward Kinematics Panel**: End-effector position, joint configuration
-  cards, interactive FK sliders that drive the robot live, and full DH
-  parameter table (dynamically generated per robot type).
-- **Inverse Kinematics Panel**: Target position sliders, IK solution display
-  with convergence status, iteration count, and FK verification error.
-- **Jacobian Panel**: Color-coded NxN Jacobian matrix with per-cell
-  magnitude-based coloring (green for positive, red for negative, grey for
-  near-zero). Includes determinant, manipulability index, reach metric,
-  manipulability bar, and singularity warning.
-- **Analytics Panel**: Three Chart.js time-series graphs (position tracking
-  error, end-effector velocity, manipulability over time) with 100-point
-  rolling window and 3-frame throttled rendering.
+Open from a workspace toolbar (**MATH DASHBOARD**) or directly:
 
-The dashboard auto-detects the robot type from the URL query parameter
-(`?robot=rrr`, `?robot=scara`, `?robot=welder`) and reconfigures all panels
-accordingly. Bidirectional control is supported: adjusting sliders on the
-dashboard sends commands back to the simulator via a separate command channel.
+`src/pages/math-dashboard.html?robot=scara` (also `rrr`, `welder`)
 
 ---
 
@@ -244,43 +219,24 @@ dashboard sends commands back to the simulator via a separate command channel.
 
 ```
 JINX-Joint_Inverse_N-dimensional_eXplorer/
-|-- index.html                    Landing page (robot selector)
-|-- vite.config.js                Vite multi-page build configuration
-|-- package.json                  Dependencies (three, chart.js, vite)
-|-- public/
-|   |-- style.css                 Global design tokens and component styles
-|   |-- favicon.svg               Application icon
-|   +-- icons.svg                 Iconography
-|-- src/
-|   |-- main.js                   Entry point (3-DOF RRR)
-|   |-- scara-main.js             Entry point (4-DOF SCARA)
-|   |-- welder-main.js            Entry point (6-DOF Welder)
-|   |-- math/
-|   |   |-- Kinematics.js         Closed-form FK/IK/Jacobian (3-DOF RRR)
-|   |   |-- KinematicsNDOF.js     Generalized N-DOF FK, Jacobian, DLS IK
-|   |   |-- Trajectory.js         Trapezoidal velocity profile
-|   |   +-- CameraModel.js        Pinhole camera projection and transform
-|   |-- core/
-|   |   |-- SceneManager.js       3-DOF RRR scene (Three.js)
-|   |   |-- ScaraSceneManager.js  4-DOF SCARA scene (Three.js)
-|   |   +-- WelderSceneManager.js 6-DOF welder scene (Three.js)
-|   |-- ui/
-|   |   |-- UIController.js       3-DOF RRR DOM events and HUD
-|   |   |-- ScaraUIController.js  4-DOF SCARA DOM events and HUD
-|   |   |-- WelderUIController.js 6-DOF welder DOM events and HUD
-|   |   |-- CameraPanel.js        Perception camera floating panel
-|   |   |-- FloatingPanel.js      Draggable panel base class
-|   |   +-- WaypointPanel.js      Waypoint editor panel (welder)
-|   |-- logic/
-|   |   |-- PickAndPlace.js       Pick-and-place FSM (SCARA)
-|   |   |-- WaypointTask.js       Waypoint trajectory executor
-|   |   +-- WeldingTask.js        Welding path automation
-|   +-- pages/
-|       |-- rrr-lamp.html         3-DOF RRR simulator page
-|       |-- scara.html            4-DOF SCARA simulator page
-|       |-- welder.html           6-DOF welding robot simulator page
-|       +-- math-dashboard.html   Live math dashboard
-+-- README.md
+├── index.html                  Workspace launcher (auth required)
+├── login.html                  Sign-in / profile setup
+├── docs/screenshots/           README images
+├── public/                     Global CSS, images, favicon
+├── src/
+│   ├── config/                 appConfig, storage keys
+│   ├── database/               Drivers + repositories
+│   ├── model/                  RobotModel, ScaraModel
+│   ├── analysis/               WorkspaceSampler, PathAnimator
+│   ├── math/                   Kinematics, Trajectory, CameraModel
+│   ├── core/                   SceneManager (RRR, SCARA, Welder)
+│   ├── ui/                     Controllers, panels, analyzer
+│   ├── logic/                  PickAndPlace, WeldingTask, Waypoints
+│   ├── auth/                   AuthService, guards
+│   └── pages/                  Simulator + math dashboard HTML
+├── .env.example                Environment variable reference
+├── .env.production             Demo seed for GitHub Pages builds
+└── vite.config.js              Multi-page Vite config
 ```
 
 ---
@@ -289,8 +245,8 @@ JINX-Joint_Inverse_N-dimensional_eXplorer/
 
 ### Prerequisites
 
-- Node.js (version 18 or later)
-- npm (version 9 or later)
+- Node.js 18+
+- npm 9+
 
 ### Installation
 
@@ -306,10 +262,11 @@ npm install
 npm run dev
 ```
 
-Navigate to `http://localhost:5173/` to view the landing page. Select any
-robot configuration to launch its simulator. The math dashboard can be
-opened from within any simulator via the dashboard button, or directly at
-`http://localhost:5173/src/pages/math-dashboard.html?robot=scara`.
+Open the URL printed by Vite (includes the repo base path), e.g.:
+
+`http://localhost:5173/JINX-Joint_Inverse_N-dimensional_eXplorer/`
+
+Sign in with the credentials from `.env.development` (default: `admin@jinx.local` / `Jinx@2026`).
 
 ### Production Build
 
@@ -320,7 +277,29 @@ npm run preview
 
 ---
 
+## GitHub Pages Deployment
+
+The project deploys via `.github/workflows/static.yml` on pushes to `main`.
+
+1. Enable **GitHub Pages** → source: **GitHub Actions**.
+2. Push to `main`; the workflow runs `npm run build` and publishes `dist/`.
+3. Visit  
+   `https://<username>.github.io/JINX-Joint_Inverse_N-dimensional_eXplorer/`
+
+**Sign-in on Pages:** use the demo account in the table at the top, or choose **Create your profile** on first visit (data stays in that browser only).
+
+Environment variables:
+
+| File | Purpose |
+|------|---------|
+| `.env.development` | Local dev seed (gitignored) |
+| `.env.production` | Demo seed baked into Pages build |
+| `.env.example` | Documented template |
+
+To change the hosted demo password, edit `.env.production` and redeploy, or set the `JINX_DEMO_PASSWORD` secret in GitHub Actions (see workflow comments).
+
+---
+
 ## License
 
-This project is released under the MIT License. See the LICENSE file for
-full terms and conditions.
+This project is released under the MIT License. See [LICENSE](LICENSE) for full terms.

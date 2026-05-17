@@ -284,7 +284,7 @@ export default class ScaraUIController {
       cancelAnimationFrame(this._taskRAF);
       this._taskRAF = null;
       const btn = $('taskBtn');
-      if (btn) { btn.textContent = '▶  Start Pick & Place'; btn.classList.remove('stop'); }
+      if (btn) { btn.textContent = 'Start Pick & Place'; btn.classList.remove('stop'); }
     }
     this._interactiveClickPhase = 0;
     const hint = $('clickHint');
@@ -372,7 +372,7 @@ export default class ScaraUIController {
     $('ik-d3').textContent = (result.q[2] * 1000).toFixed(1) + ' mm';
     $('ik-t4').textContent = RAD(result.q[3]).toFixed(1) + '°';
     $('ik-err').textContent = result.error.toExponential(2) + ' m';
-    $('ik-conv').textContent = result.converged ? '✓ Yes' : '✗ No';
+    $('ik-conv').textContent = result.converged ? 'OK Yes' : 'NO No';
     $('ik-conv').style.color = result.converged ? 'var(--grn)' : 'var(--red2)';
     $('ik-iter').textContent = result.iterations;
 
@@ -381,7 +381,7 @@ export default class ScaraUIController {
     if (alertEl) alertEl.classList.toggle('on', !result.converged);
 
     // HUD status
-    $('hStat').textContent = result.converged ? '✓ Valid' : '⚠ No Convergence';
+    $('hStat').textContent = result.converged ? 'OK Valid' : 'WARN No Convergence';
     $('hStat').className = result.converged ? 'ok' : 'bad';
     $('hErr').textContent = result.error.toExponential(2) + ' m';
     
@@ -600,7 +600,7 @@ export default class ScaraUIController {
       this._pnp.stop();
       cancelAnimationFrame(this._taskRAF);
       this._taskRAF = null;
-      btn.textContent = '▶  Start Pick & Place';
+      btn.textContent = 'Start Pick & Place';
       btn.classList.remove('stop');
       $('task-state').textContent = 'IDLE';
       $('task-state').style.color = '#8080a8';
@@ -626,7 +626,7 @@ export default class ScaraUIController {
         if (hint) hint.style.display = 'none';
       }
 
-      btn.textContent = '⏹  Stop Pick & Place';
+      btn.textContent = 'Stop Pick & Place';
       btn.classList.add('stop');
       this._lastTime = performance.now();
       this._runTask();

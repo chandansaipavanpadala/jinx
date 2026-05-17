@@ -7,7 +7,7 @@
  *   const panel = new FloatingPanel({
  *     id: 'fp-fk',
  *     title: 'Forward Kinematics',
- *     icon: '🎛️',
+ *     icon: 'CTL',
  *     contentEl: document.getElementById('pane-fk'),
  *     startX: 20, startY: 80,
  *     startCollapsed: false
@@ -22,7 +22,7 @@ export default class FloatingPanel {
    * @param {Object} opts
    * @param {string} opts.id        - Unique DOM id
    * @param {string} opts.title     - Header title text
-   * @param {string} opts.icon      - Emoji or SVG icon
+   * @param {string} opts.icon      - Short header icon label (ASCII)
    * @param {HTMLElement} opts.contentEl - Existing DOM element to move into the panel body
    * @param {number} [opts.startX=20]
    * @param {number} [opts.startY=80]
@@ -32,7 +32,7 @@ export default class FloatingPanel {
   constructor(opts) {
     this.id = opts.id;
     this.title = opts.title;
-    this.icon = opts.icon || '⚙';
+    this.icon = opts.icon || 'J';
     this.contentEl = opts.contentEl;
     this.startX = opts.startX ?? 20;
     this.startY = opts.startY ?? 80;
@@ -72,19 +72,19 @@ export default class FloatingPanel {
     // Collapse button
     const colBtn = document.createElement('button');
     colBtn.className = 'fp-btn fp-collapse';
-    colBtn.innerHTML = this.collapsed ? '▼' : '▲';
+    colBtn.innerHTML = this.collapsed ? 'v' : '^';
     colBtn.title = 'Collapse / Expand';
     colBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       this.toggleCollapse();
-      colBtn.innerHTML = this.collapsed ? '▼' : '▲';
+      colBtn.innerHTML = this.collapsed ? 'v' : '^';
     });
     header.appendChild(colBtn);
 
     // Close button
     const closeBtn = document.createElement('button');
     closeBtn.className = 'fp-btn fp-close';
-    closeBtn.innerHTML = '✕';
+    closeBtn.innerHTML = 'X';
     closeBtn.title = 'Close panel';
     closeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -280,7 +280,7 @@ export function makePanelsModular(cw) {
     const fp = new FloatingPanel({
       id: 'fp-hierarchy',
       title: 'SCENE HIERARCHY',
-      icon: '⛒',
+      icon: 'O',
       contentEl: hierarchy,
       startX: 20,
       startY: 60
@@ -299,7 +299,7 @@ export function makePanelsModular(cw) {
     const fp = new FloatingPanel({
       id: 'fp-inspector',
       title: 'INSPECTOR',
-      icon: '⚙',
+      icon: 'J',
       contentEl: inspector,
       startX: Math.max(window.innerWidth - 320, 20),
       startY: 60
@@ -319,7 +319,7 @@ export function makePanelsModular(cw) {
     const fp = new FloatingPanel({
       id: 'fp-console',
       title: 'SYSTEM TERMINAL',
-      icon: '💻',
+      icon: 'TERM',
       contentEl: consoleBody,
       startX: 20,
       startY: Math.max(window.innerHeight - 260, 60),

@@ -19,7 +19,7 @@ const fk0 = fk(q0, SCARA_DH_CONFIG);
 console.log('  Position:', fmt(fk0.position));
 // Expected: x = L1 + L2 = 0.55, y = 0, z = 0.35 (base height)
 console.log('  Expected: [0.5500, 0.0000, 0.3500]');
-console.log('  ✓ Pass:', Math.abs(fk0.position[0] - 0.55) < 1e-6 && Math.abs(fk0.position[2] - 0.35) < 1e-6);
+console.log('  OK Pass:', Math.abs(fk0.position[0] - 0.55) < 1e-6 && Math.abs(fk0.position[2] - 0.35) < 1e-6);
 
 // ── TEST 2: FK with J1 = 90° ──
 console.log('\nTEST 2: FK with J1 = 90°');
@@ -28,7 +28,7 @@ const fk1 = fk(q1, SCARA_DH_CONFIG);
 console.log('  Position:', fmt(fk1.position));
 // Expected: x ≈ 0, y = 0.55, z = 0.35
 console.log('  Expected: [0.0000, 0.5500, 0.3500]');
-console.log('  ✓ Pass:', Math.abs(fk1.position[1] - 0.55) < 1e-4 && Math.abs(fk1.position[0]) < 1e-4);
+console.log('  OK Pass:', Math.abs(fk1.position[1] - 0.55) < 1e-4 && Math.abs(fk1.position[0]) < 1e-4);
 
 // ── TEST 3: FK with prismatic joint ──
 console.log('\nTEST 3: FK with J3 = 0.1 (prismatic 100mm)');
@@ -49,7 +49,7 @@ console.log('  Position:', fmt(fk3.position));
 console.log('\nTEST 5: Jacobian dimensions');
 const jac = jacobian(q0, SCARA_DH_CONFIG);
 console.log('  Shape: ' + jac.rows + '×' + jac.cols);
-console.log('  ✓ Pass:', jac.rows === 6 && jac.cols === 4);
+console.log('  OK Pass:', jac.rows === 6 && jac.cols === 4);
 
 // Print Jacobian at home
 console.log('  Jacobian at home:');

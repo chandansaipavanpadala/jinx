@@ -213,7 +213,7 @@ export class WelderUIController {
           this.isWelding = false;
           if (this._taskRAF) { cancelAnimationFrame(this._taskRAF); this._taskRAF = null; }
           const wb = $('btn-weld');
-          if (wb) { wb.textContent = '▶ Start Welding'; wb.classList.remove('stop'); }
+          if (wb) { wb.textContent = 'Start Welding'; wb.classList.remove('stop'); }
         }
         logger.info('Resetting Welder to home pose.');
         this.sm.resetTrail();
@@ -323,7 +323,7 @@ export class WelderUIController {
       this.stateMachine.stop();
       this.isWelding = false;
       if (this._taskRAF) { cancelAnimationFrame(this._taskRAF); this._taskRAF = null; }
-      if (btn) { btn.textContent = '▶ Start Welding'; btn.classList.remove('stop'); }
+      if (btn) { btn.textContent = 'Start Welding'; btn.classList.remove('stop'); }
       this.sm.setSparkActive(false);
     } else {
       // ── Start ──
@@ -331,7 +331,7 @@ export class WelderUIController {
       this.sm.resetTrail();
       this.stateMachine.start();
       this.isWelding = true;
-      if (btn) { btn.textContent = '⏹ Stop Welding'; btn.classList.add('stop'); }
+      if (btn) { btn.textContent = 'Stop Welding'; btn.classList.add('stop'); }
 
       this._lastTime = performance.now();
       this._runTask();
@@ -361,11 +361,11 @@ export class WelderUIController {
       // Task completed — auto-stop
       this.isWelding = false;
       const btn = $('btn-weld');
-      if (btn) { btn.textContent = '▶ Start Welding'; btn.classList.remove('stop'); }
+      if (btn) { btn.textContent = 'Start Welding'; btn.classList.remove('stop'); }
       this.sm.setSparkActive(false);
       // Update UI to show completion
       const stEl = $('val-task-state');
-      if (stEl) stEl.innerText = 'COMPLETE ✓';
+      if (stEl) stEl.innerText = 'COMPLETE OK';
       const progEl = $('val-task-prog');
       if (progEl) progEl.innerText = '100%';
       this._updateHUD(); // reset HUD status to READY
@@ -496,7 +496,7 @@ export class WelderUIController {
     const hStat = $('hStat');
     if (hStat) {
       if (this.isWelding) {
-        hStat.innerText = this.stateMachine.currentState === this.stateMachine.states.WELDING ? '🔥 WELDING' : '⏳ MOVING';
+        hStat.innerText = this.stateMachine.currentState === this.stateMachine.states.WELDING ? 'WELDING' : 'MOVING';
         hStat.className = 'bad';
       } else {
         hStat.innerText = 'READY';

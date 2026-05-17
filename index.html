@@ -951,16 +951,16 @@
               <h3>3. Simulation Loop Execution Flow</h3>
               <pre><code>[Browser RequestAnimationFrame Loop]
                               │
-                              ▼
+                              v
                     [Execute State Machine] (Pick & Place / Custom Tasks)
                               │
-                              ▼
+                              v
                     [Execute Kinematic Solvers] (FK / IK Calculations)
                               │
-                              ▼
+                              v
                     [Update 3D SceneManager] (Transform joint coordinates)
                               │
-                              ▼
+                              v
                     [Refresh UI HUD Elements] (Stats, graphs, terminal logs)</code></pre>
             `
           },

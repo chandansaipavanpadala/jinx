@@ -60,14 +60,14 @@ export default class WaypointPanel {
     ctrlRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;';
 
     // Add Waypoint button
-    const addBtn = this._makeBtn('＋ Add EE Pos', 'var(--cyan)', () => {
+    const addBtn = this._makeBtn('+ Add EE Pos', 'var(--cyan)', () => {
       const pos = this._opts.getEEPos();
       if (pos && this._opts.onAdd) this._opts.onAdd({ x: pos[0], y: pos[1], z: pos[2] });
     });
     addBtn.style.flex = '1';
 
     // Clear All button
-    const clearBtn = this._makeBtn('🗑 Clear', 'var(--red2)', () => {
+    const clearBtn = this._makeBtn('Clear', 'var(--red2)', () => {
       if (this._opts.onClear) this._opts.onClear();
     });
     clearBtn.style.flex = '0 0 auto';
@@ -107,7 +107,7 @@ export default class WaypointPanel {
 
     this._playBtn = document.createElement('button');
     this._playBtn.className = 'sbtn';
-    this._playBtn.textContent = '▶ Play Path';
+    this._playBtn.textContent = 'Play Path';
     this._playBtn.style.cssText = 'flex:1;padding:10px;font-size:12px;';
     this._playBtn.addEventListener('click', () => {
       if (this._isPlaying) {
@@ -124,7 +124,7 @@ export default class WaypointPanel {
       cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;
     `;
     this._loopBtn.title = 'Toggle loop mode';
-    this._loopBtn.textContent = '🔁';
+    this._loopBtn.textContent = 'Loop';
     this._loopBtn.addEventListener('click', () => {
       this._isLoop = !this._isLoop;
       this._loopBtn.style.background = this._isLoop
@@ -170,7 +170,7 @@ export default class WaypointPanel {
     this._panel = new FloatingPanel({
       id: 'fp-waypoints',
       title: 'Waypoint Planner',
-      icon: '📍',
+      icon: 'WP',
       contentEl: container,
       startX: this._opts.startX ?? 20,
       startY: this._opts.startY ?? 100,
@@ -230,13 +230,13 @@ export default class WaypointPanel {
       const btnWrap = document.createElement('span');
       btnWrap.style.cssText = 'display:flex;gap:2px;flex-shrink:0;';
 
-      if (i > 0) btnWrap.appendChild(this._makeSmallBtn('▲', () => {
+      if (i > 0) btnWrap.appendChild(this._makeSmallBtn('^', () => {
         if (this._opts.onMove) this._opts.onMove(i, i - 1);
       }));
-      if (i < waypoints.length - 1) btnWrap.appendChild(this._makeSmallBtn('▼', () => {
+      if (i < waypoints.length - 1) btnWrap.appendChild(this._makeSmallBtn('v', () => {
         if (this._opts.onMove) this._opts.onMove(i, i + 1);
       }));
-      btnWrap.appendChild(this._makeSmallBtn('✕', () => {
+      btnWrap.appendChild(this._makeSmallBtn('X', () => {
         if (this._opts.onRemove) this._opts.onRemove(i);
       }, true));
 
@@ -272,10 +272,10 @@ export default class WaypointPanel {
     this._isPlaying = isPlaying;
     if (!this._playBtn) return;
     if (isPlaying) {
-      this._playBtn.textContent = '⏹ Stop';
+      this._playBtn.textContent = 'Stop';
       this._playBtn.classList.add('stop');
     } else {
-      this._playBtn.textContent = '▶ Play Path';
+      this._playBtn.textContent = 'Play Path';
       this._playBtn.classList.remove('stop');
     }
   }

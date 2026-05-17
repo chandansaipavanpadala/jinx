@@ -74,7 +74,7 @@ function renderRecentTable(tbody, recent, byId, db) {
       <td>${ws.dof}-DOF</td>
       <td>${ws.dof}</td>
       <td>${timeStr}</td>
-      <td><div class="table-actions"><span aria-hidden="true">→</span></div></td>`;
+      <td><div class="table-actions"><span aria-hidden="true">&gt;</span></div></td>`;
     const open = () => {
       db.workspaces.recordVisit(ws.id);
       window.location.href = ws.href;

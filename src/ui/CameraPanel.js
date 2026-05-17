@@ -79,7 +79,7 @@ export default class CameraPanel {
       font-family:'JetBrains Mono',monospace;
       text-shadow:0 1px 4px rgba(0,0,0,0.8);
     `;
-    vpLabel.textContent = '📷 PERCEPTION FEED';
+    vpLabel.textContent = 'PERCEPTION FEED';
     vpWrap.appendChild(vpLabel);
 
     // Crosshair overlay
@@ -165,7 +165,7 @@ export default class CameraPanel {
     this._panel = new FloatingPanel({
       id: 'fp-camera',
       title: 'Perception Camera',
-      icon: '📷',
+      icon: 'CAM',
       contentEl: container,
       startX: this._startX,
       startY: this._startY,

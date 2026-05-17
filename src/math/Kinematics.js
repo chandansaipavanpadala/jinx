@@ -2,9 +2,9 @@
  * Kinematics.js — Closed-form FK/IK solvers & Analytical Jacobian
  * 
  * 3-DOF RRR Planar Arm (DH Convention)
- *   Link 1: a=0, α=π/2, d=L1, θ=θ1★
- *   Link 2: a=L2, α=0,   d=0,  θ=θ2★
- *   Link 3: a=L3, α=0,   d=0,  θ=θ3★
+ *   Link 1: a=0, α=π/2, d=L1, θ=θ1
+ *   Link 2: a=L2, α=0,   d=0,  θ=θ2
+ *   Link 3: a=L3, α=0,   d=0,  θ=θ3
  *
  * All math extracted verbatim from the monolithic prototype.
  */

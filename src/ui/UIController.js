@@ -317,7 +317,7 @@ export default class UIController {
     const t2 = clamp(sol.t2, T2MIN, T2MAX);
     const t3 = clamp(sol.t3, T3MIN, T3MAX);
     $('limAlert').classList.toggle('on', !limOk && tab === 'ik');
-    $('hStat').textContent = limOk ? '✓ Valid' : '⚠ Limit';
+    $('hStat').textContent = limOk ? 'OK Valid' : 'WARN Limit';
     $('hStat').className = limOk ? 'ok' : 'bad';
     
     if (!limOk && this._lastStatus !== 'limit') {
@@ -335,8 +335,8 @@ export default class UIController {
 
     if (tab === 'ik') {
       $('ik-t1').textContent = RAD(t1).toFixed(1) + '°';
-      $('ik-t2').textContent = RAD(sol.t2).toFixed(1) + (limOk ? '' : '⚠') + '°';
-      $('ik-t3').textContent = RAD(sol.t3).toFixed(1) + (limOk ? '' : '⚠') + '°';
+      $('ik-t2').textContent = RAD(sol.t2).toFixed(1) + (limOk ? '' : 'WARN') + '°';
+      $('ik-t3').textContent = RAD(sol.t3).toFixed(1) + (limOk ? '' : 'WARN') + '°';
       $('ik-err').textContent = err.toExponential(2) + ' m';
       $('ik-r').textContent = fv.r.toFixed(4) + ' m';
       $('ik-z').textContent = fv.z.toFixed(4) + ' m';
@@ -563,13 +563,13 @@ export default class UIController {
     const btn = $('sbtn');
     if (this.simRunning) {
       logger.info('Simulation started.');
-      btn.textContent = '⏹  Stop Simulation'; btn.classList.add('stop');
+      btn.textContent = 'Stop Simulation'; btn.classList.add('stop');
       $('simStats').style.display = 'block';
       this.trailBuf = []; this.sm.resetTrail(); this.trapT = 0;
       this._runSim();
     } else {
       logger.log('Simulation stopped.');
-      btn.textContent = '▶  Play Simulation'; btn.classList.remove('stop');
+      btn.textContent = 'Play Simulation'; btn.classList.remove('stop');
       cancelAnimationFrame(this.simRAF);
     }
   }

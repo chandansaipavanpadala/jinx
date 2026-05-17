@@ -45,11 +45,11 @@ export function trapProfile(t, T, vmax, amax) {
     if (t < tMid) {
       const ratio = t / T;
       const s = 2 * ratio * ratio;
-      return { s: clamp(s, 0, 1), sdot: amax * t, sddot: amax, phase: 'accel▲' };
+      return { s: clamp(s, 0, 1), sdot: amax * t, sddot: amax, phase: 'accel^' };
     } else {
       const ratio = (T - t) / T;
       const s = 1 - 2 * ratio * ratio;
-      return { s: clamp(s, 0, 1), sdot: amax * (T - t), sddot: -amax, phase: 'decel▼' };
+      return { s: clamp(s, 0, 1), sdot: amax * (T - t), sddot: -amax, phase: 'decelv' };
     }
   }
 
@@ -64,7 +64,7 @@ export function trapProfile(t, T, vmax, amax) {
   if (t < t1) {
     // Phase 1: Acceleration
     const s = sAccelEnd * (t / t1) * (t / t1);
-    return { s, sdot: amax * t, sddot: amax, phase: 'accel▲' };
+    return { s, sdot: amax * t, sddot: amax, phase: 'accel^' };
   } else if (t <= t2) {
     // Phase 2: Cruise (constant velocity)
     const s = sAccelEnd + vmax * (t - t1);
@@ -73,6 +73,6 @@ export function trapProfile(t, T, vmax, amax) {
     // Phase 3: Deceleration
     const dt = t - t2;
     const s = sDecelStart + vmax * dt - 0.5 * amax * dt * dt;
-    return { s: clamp(s, 0, 1), sdot: vmax - amax * dt, sddot: -amax, phase: 'decel▼' };
+    return { s: clamp(s, 0, 1), sdot: vmax - amax * dt, sddot: -amax, phase: 'decelv' };
   }
 }

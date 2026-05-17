@@ -32,7 +32,7 @@ export default class MathDashboardPanel {
     this._panel = new FloatingPanel({
       id: 'fp-math',
       title: 'Math Dashboard',
-      icon: '📊',
+      icon: 'MATH',
       contentEl: container,
       startX: 60,
       startY: 60,

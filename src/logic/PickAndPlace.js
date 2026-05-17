@@ -26,14 +26,14 @@ export const STATE = Object.freeze({
 });
 
 export const STATE_META = Object.freeze({
-  [STATE.IDLE]:       { label: '⏸  Idle',                              color: '#8080a8' },
-  [STATE.PRE_GRASP]:  { label: '🎯  Pre-Grasp — Moving above payload', color: '#ffcc00' },
-  [STATE.GRASP]:      { label: '⬇  Grasping — Descending',             color: '#ff9900' },
-  [STATE.LIFT]:       { label: '⬆  Lifting — Ascending with payload',  color: '#00f07f' },
-  [STATE.HOLDING]:    { label: '✋  Holding — Click table to set drop', color: '#00e5ff' },
-  [STATE.TRANSFER]:   { label: '➡  Transferring — Moving to drop zone', color: '#00e5ff' },
-  [STATE.PLACE]:      { label: '⬇  Placing — Descending to drop',      color: '#6c5ce7' },
-  [STATE.RETURN]:     { label: '↩  Returning — Ascending & homing',    color: '#00e5ff' },
+  [STATE.IDLE]:       { label: 'Idle',                              color: '#8080a8' },
+  [STATE.PRE_GRASP]:  { label: 'Pre-Grasp — Moving above payload', color: '#ffcc00' },
+  [STATE.GRASP]:      { label: 'Grasping — Descending',             color: '#ff9900' },
+  [STATE.LIFT]:       { label: 'Lifting — Ascending with payload',  color: '#00f07f' },
+  [STATE.HOLDING]:    { label: 'Holding — Click table to set drop', color: '#00e5ff' },
+  [STATE.TRANSFER]:   { label: 'Transferring — Moving to drop zone', color: '#00e5ff' },
+  [STATE.PLACE]:      { label: 'Placing — Descending to drop',      color: '#6c5ce7' },
+  [STATE.RETURN]:     { label: 'Returning — Ascending & homing',    color: '#00e5ff' },
 });
 
 /* ═══════════════════════════════════════════════════════════════

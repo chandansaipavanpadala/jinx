@@ -70,7 +70,7 @@ export default class AnalyzerPanel {
     this._panel = new FloatingPanel({
       id: 'fp-analyzer',
       title: 'RoboAnalyzer — SCARA',
-      icon: '🔬',
+      icon: 'ANL',
       contentEl: root,
       startX: 420,
       startY: 48,
@@ -294,15 +294,15 @@ export default class AnalyzerPanel {
     const presets = document.createElement('div');
     presets.className = 'analyzer-row';
     presets.innerHTML = `
-      <button type="button" class="analyzer-btn primary" id="path-home">→ Home</button>
-      <button type="button" class="analyzer-btn" id="path-ext">→ Extended</button>`;
+      <button type="button" class="analyzer-btn primary" id="path-home">Go Home</button>
+      <button type="button" class="analyzer-btn" id="path-ext">Go Extended</button>`;
     pane.appendChild(presets);
 
     const controls = document.createElement('div');
     controls.className = 'analyzer-row';
     controls.innerHTML = `
-      <button type="button" class="analyzer-btn primary" id="path-play">▶ Play</button>
-      <button type="button" class="analyzer-btn" id="path-stop">■ Stop</button>`;
+      <button type="button" class="analyzer-btn primary" id="path-play">Play</button>
+      <button type="button" class="analyzer-btn" id="path-stop">Stop</button>`;
     pane.appendChild(controls);
 
     const status = document.createElement('p');
