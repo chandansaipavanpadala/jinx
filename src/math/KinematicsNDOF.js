@@ -323,6 +323,93 @@ export function calcCartesianVelocity(J, n, qDot) {
   return pdot;
 }
 
+/**
+ * Computes singular values and orientation for the manipulability ellipsoid.
+ * Based on J*J^T (where J is the 3xN linear velocity Jacobian).
+ * 
+ * @param {Float64Array} J_flat - Flat 6xN Jacobian (row-major)
+ * @param {number} n - Number of joints
+ * @returns {{ singularValues: number[], rotation: number[], mu: number }}
+ */
+export function getEllipsoid(J_flat, n) {
+  // 1. Construct Jv (top 3 rows) and compute A = Jv * Jv^T
+  const A = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      let sum = 0;
+      for (let k = 0; k < n; k++) {
+        sum += J_flat[i * n + k] * J_flat[j * n + k];
+      }
+      A[i * 3 + j] = sum;
+    }
+  }
+
+  // 2. Eigen-decomposition of the 3x3 symmetric matrix A
+  // Uses Jacobi eigenvalue algorithm for small symmetric matrices
+  const { values, vectors } = eigen3x3(A);
+
+  // 3. Singular values of Jv are sqrt(eigenvalues of Jv*Jv^T)
+  const singularValues = values.map(v => Math.sqrt(Math.max(0, v)));
+  
+  // 4. Manipulability Index (mu) = product of singular values
+  const mu = singularValues.reduce((a, b) => a * b, 1);
+
+  return {
+    singularValues,
+    rotation: vectors, // 3x3 row-major rotation matrix
+    mu
+  };
+}
+
+/**
+ * Jacobi eigenvalue algorithm for 3x3 symmetric matrices.
+ */
+function eigen3x3(A) {
+  const V = [1, 0, 0, 0, 1, 0, 0, 0, 1]; // Eigenvectors (Identity start)
+  const D = [...A]; // Working matrix (becomes diagonal)
+  
+  const maxIters = 20;
+  for (let iter = 0; iter < maxIters; iter++) {
+    // Find largest off-diagonal element
+    let p = 0, q = 1;
+    let maxOff = Math.abs(D[0 * 3 + 1]);
+    if (Math.abs(D[0 * 3 + 2]) > maxOff) { p = 0; q = 2; maxOff = Math.abs(D[0 * 3 + 2]); }
+    if (Math.abs(D[1 * 3 + 2]) > maxOff) { p = 1; q = 2; maxOff = Math.abs(D[1 * 3 + 2]); }
+
+    if (maxOff < 1e-12) break;
+
+    // Compute rotation angle
+    const theta = 0.5 * Math.atan2(2 * D[p * 3 + q], D[q * 3 + q] - D[p * 3 + p]);
+    const c = Math.cos(theta), s = Math.sin(theta);
+
+    // Update D (Similarity transform D = R^T * D * R)
+    const dpp = D[p * 3 + p], dqq = D[q * 3 + q], dpq = D[p * 3 + q];
+    D[p * 3 + p] = c * c * dpp - 2 * s * c * dpq + s * s * dqq;
+    D[q * 3 + q] = s * s * dpp + 2 * s * c * dpq + c * c * dqq;
+    D[p * 3 + q] = D[q * 3 + p] = 0;
+
+    for (let i = 0; i < 3; i++) {
+      if (i !== p && i !== q) {
+        const dip = D[i * 3 + p], diq = D[i * 3 + q];
+        D[i * 3 + p] = D[p * 3 + i] = c * dip - s * diq;
+        D[i * 3 + q] = D[q * 3 + i] = s * dip + c * diq;
+      }
+    }
+
+    // Update V (Eigenvectors V = V * R)
+    for (let i = 0; i < 3; i++) {
+      const vip = V[i * 3 + p], viq = V[i * 3 + q];
+      V[i * 3 + p] = c * vip - s * viq;
+      V[i * 3 + q] = s * vip + c * viq;
+    }
+  }
+
+  return {
+    values: [D[0], D[4], D[8]],
+    vectors: V
+  };
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  §4  SMALL DENSE LINEAR ALGEBRA (for DLS solver)

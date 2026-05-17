@@ -1,87 +1,193 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>4-DOF SCARA Arm — JINX Simulator</title>
-  <meta name="description"
-    content="4-DOF SCARA robotic arm: Damped Least-Squares IK, Jacobian analysis, prismatic joint control.">
+  <title>4-DOF SCARA Workspace — JINX Simulator</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
+  <script type="module" src="../auth/workspace-guard.js"></script>
 </head>
-
-<body>
-  <div class="layout">
-
-      <!-- Header -->
-      <div class="hbar">
-        <a href="../../index.html" class="back-btn">← Home</a>
-        <div>
-        <div class="htitle">4-DOF SCARA Arm<span class="badge">3D Simulator</span></div>
-        <div class="hsub">Damped Least-Squares IK · 6×N Jacobian · Prismatic Joint · N-DOF Engine</div>
-      </div>
+<body data-workspace="scara">
+  <div class="workstation">
+    
+    <!-- TOOLBAR -->
+    <div class="toolbar" id="toolbar">
+      <div class="toolbar-title">JINX // 4-DOF SCARA ARM</div>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn active" id="btn-orbit">ORBIT</button>
+      <button class="toolbar-btn" id="btn-pan">PAN</button>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn" id="btn-wireframe">WIREFRAME</button>
+      <button class="toolbar-btn" id="btn-frames">FRAMES</button>
+      <button class="toolbar-btn" id="btn-ellipsoid">DIAGNOSTICS</button>
+      <button class="toolbar-btn" id="btn-math-panel">MATH DASHBOARD</button>
+      <button class="toolbar-btn" id="btn-analyzer">ANALYZER</button>
+      <div class="toolbar-sep"></div>
+      <select class="num-input" id="taskMode" style="width: 140px; margin-right: 8px;">
+        <option value="auto">AUTO LOOP</option>
+        <option value="interactive">INTERACTIVE CLICK</option>
+      </select>
+      <button class="toolbar-btn primary" id="taskBtn">RUN AUTOMATION</button>
+      <button class="toolbar-btn" id="resetBtn">RESET POSE</button>
+      <div style="flex:1"></div>
+      <a href="../../index.html" class="toolbar-btn">LAUNCHER</a>
     </div>
 
-    <div class="body-row">
-
-      <!-- 3D Canvas (now takes full width) -->
-      <div id="cw">
-        <div class="hud" id="hud">
-          <div><b>θ₁</b> <span id="h1">—</span>&ensp;<b>θ₂</b> <span id="h2">—</span>&ensp;<b>d₃</b> <span
-              id="h3">—</span>&ensp;<b>θ₄</b> <span id="h4">—</span></div>
-          <div><b>EE</b> <span id="hHead">—</span></div>
-          <div><b>IK Error</b> <span id="hErr">—</span></div>
-          <div><b>Status</b> <span id="hStat" class="ok">—</span></div>
-        </div>
-        <div class="cam-hint">Drag to orbit · Scroll to zoom · Right-drag to pan</div>
-
-        <!-- ═══ Minimal Control Bar ═══ -->
-        <div class="sim-control-bar" id="simControlBar">
-          <select class="sim-select" id="taskMode">
-            <option value="auto">🔄 Auto Loop</option>
-            <option value="interactive">🖱️ Interactive Click</option>
-          </select>
-          <button class="sim-btn sim-btn-primary" id="taskBtn">▶ Run Pick & Place</button>
-          <button class="sim-btn sim-btn-secondary" id="btn-math-panel">📐 Open Math Panel</button>
-          <button class="sim-btn sim-btn-ghost" id="cameraBtn">📷 Camera</button>
-          <button class="sim-btn sim-btn-ghost" id="resetBtn">⟲ Reset</button>
-        </div>
-        <!-- Click hint overlay for interactive mode -->
-        <div class="click-hint-overlay" id="clickHint">
-          🖱️ Click on the table to set the <strong>Pick</strong> position, then click again for <strong>Drop</strong>
-        </div>
-
-        <!-- ═══ Link Detail Card (hidden by default) ═══ -->
-        <div class="link-card" id="linkCard">
-          <div class="link-card-header">
-            <span class="link-card-icon">🔗</span>
-            <span class="link-card-title" id="linkCardTitle">Link</span>
-            <button class="link-card-close" id="linkCardClose">✕</button>
+    <!-- WORKSPACE -->
+    <div class="workspace">
+      
+      <!-- HIERARCHY PANEL (Left) -->
+      <aside class="sidebar sidebar-left" id="hierarchy">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">SCENE HIERARCHY</div>
+          <div class="sidebar-section-body" style="padding: 0;">
+            <div class="tree-item"><span class="tree-icon">⛒</span> WORLD ORIGIN</div>
+            <div class="tree-item" data-link="0"><span class="tree-icon">⚙</span> JOINT 1 <span class="badge" id="tree-t1">0.00°</span></div>
+            <div class="tree-item" data-link="1"><span class="tree-icon">🔗</span> LINK 1 (SHOULDER)</div>
+            <div class="tree-item" data-link="1"><span class="tree-icon">⚙</span> JOINT 2 <span class="badge" id="tree-t2">0.00°</span></div>
+            <div class="tree-item" data-link="2"><span class="tree-icon">🔗</span> LINK 2 (ELBOW)</div>
+            <div class="tree-item" data-link="2"><span class="tree-icon">⇕</span> JOINT 3 <span class="badge" id="tree-t3">0.00m</span></div>
+            <div class="tree-item" data-link="3"><span class="tree-icon">⚙</span> JOINT 4 <span class="badge" id="tree-t4">0.00°</span></div>
+            <div class="tree-item active"><span class="tree-icon">🎯</span> END EFFECTOR</div>
           </div>
-          <div class="link-card-body">
-            <div class="link-card-readout">
-              <span class="link-card-label">Length</span>
-              <span class="link-card-value" id="linkCardValue">0.000 m</span>
+        </div>
+      </aside>
+
+      <!-- 3D VIEWPORT -->
+      <div class="viewport" id="cw">
+        
+        <!-- HUD Overlay (Engineering Card) -->
+        <div class="hud-card" id="hud">
+          <div class="hud-row"><span class="hud-label">FPS</span><span class="hud-value">60</span></div>
+          <div style="height:4px; border-bottom:1px solid var(--border); margin-bottom:4px;"></div>
+          <div class="hud-row"><span class="hud-label">JOINT 1</span><span class="hud-value" id="h1">0.0°</span></div>
+          <div class="hud-row"><span class="hud-label">JOINT 2</span><span class="hud-value" id="h2">0.0°</span></div>
+          <div class="hud-row"><span class="hud-label">JOINT 3</span><span class="hud-value" id="h3">0.00m</span></div>
+          <div class="hud-row"><span class="hud-label">JOINT 4</span><span class="hud-value" id="h4">0.0°</span></div>
+          <div style="height:4px; border-bottom:1px solid var(--border); margin-bottom:4px; margin-top:2px;"></div>
+          <div class="hud-row"><span class="hud-label">POSITION</span><span class="hud-value" id="hHead">[0, 0, 0]</span></div>
+          <div class="hud-row"><span class="hud-label">IK ERROR</span><span class="hud-value" id="hErr">0.000</span></div>
+          <div class="hud-row"><span class="hud-label">STATUS</span><span class="hud-value ok" id="hStat">READY</span></div>
+        </div>
+        
+        <div class="cam-hint">Drag to orbit · Shift + Drag to move target · Scroll to zoom</div>
+        
+        <!-- Click hint overlay for interactive mode -->
+        <div id="clickHint" style="display:none; position:absolute; bottom:16px; left:50%; transform:translateX(-50%); background:var(--bg-panel); border:1px solid var(--accent); padding:8px 16px; border-radius:3px; color:var(--text); font-size:12px;">
+          🖱️ Click table to set <strong>Pick</strong>, then click again for <strong>Drop</strong>
+        </div>
+        
+        <!-- Context Popup (Link Resizer) -->
+        <div class="context-popup" id="linkCard">
+          <div class="context-header">
+            <span id="linkCardTitle">Link</span>
+            <button class="context-close" id="linkCardClose">✕</button>
+          </div>
+          <div class="context-body">
+            <div class="inspector-row">
+              <span class="inspector-label">Length</span>
+              <span class="inspector-value" id="linkCardValue">0.000 m</span>
             </div>
-            <input type="range" class="link-card-slider" id="linkCardSlider" min="0.05" max="0.50" value="0.30" step="0.005">
-            <div class="link-card-range">
+            <input type="range" class="eng-slider" id="linkCardSlider" min="0.05" max="0.50" value="0.30" step="0.005">
+            <div class="inspector-row" style="font-size: 10px; color: var(--text-dim);">
               <span id="linkCardMin">0.05</span>
-              <span class="link-card-default" id="linkCardDefault">default: 0.30 m</span>
+              <span id="linkCardDefault">default: 0.30 m</span>
               <span id="linkCardMax">0.50</span>
             </div>
-            <button class="link-card-reset" id="linkCardReset">⟲ Reset to Default</button>
+            <button class="toolbar-btn" style="width:100%; border:1px solid var(--border);" id="linkCardReset">Reset Default</button>
           </div>
         </div>
       </div>
 
+      <!-- INSPECTOR PANEL (Right) -->
+      <aside class="sidebar sidebar-right" id="inspector">
+        
+        <!-- Target Pose Section -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">Target Coordinates</div>
+          <div class="sidebar-section-body">
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Target X</span>
+                <span class="inspector-value" id="ik-xtv">0.40</span>
+              </div>
+              <input type="range" class="eng-slider" id="ik-xt" min="-0.55" max="0.55" value="0.40" step="0.005">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Target Y</span>
+                <span class="inspector-value" id="ik-ytv">0.10</span>
+              </div>
+              <input type="range" class="eng-slider" id="ik-yt" min="-0.55" max="0.55" value="0.10" step="0.005">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Target Z</span>
+                <span class="inspector-value" id="ik-ztv">0.30</span>
+              </div>
+              <input type="range" class="eng-slider" id="ik-zt" min="0.05" max="0.35" value="0.30" step="0.005">
+            </div>
+          </div>
+        </div>
+
+        <!-- DLS IK Params -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">DLS Solver Settings</div>
+          <div class="sidebar-section-body">
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Damping (λ)</span>
+                <span class="inspector-value" id="ik-lambdav">0.08</span>
+              </div>
+              <input type="range" class="eng-slider" id="ik-lambda" min="0.01" max="0.5" value="0.08" step="0.01">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Max Iters</span>
+                <span class="inspector-value" id="ik-maxiterv">150</span>
+              </div>
+              <input type="range" class="eng-slider" id="ik-maxiter" min="20" max="500" value="150" step="10">
+            </div>
+          </div>
+        </div>
+
+      </aside>
+
     </div>
+
+    <!-- TERMINAL -->
+    <div class="console" id="consoleBody">
+      <div class="log-entry">
+        <span class="log-time">[00:00:00.000]</span>
+        <span class="log-tag info">SYSTEM</span>
+        <span class="log-msg">JINX WORKSTATION INITIALIZED // SCARA CORE READY</span>
+      </div>
+    </div>
+
+    <!-- STATUS BAR (Bottom) -->
+    <footer class="status-bar">
+      <div class="status-item">
+        <span class="status-accent">●</span> SYSTEM READY
+      </div>
+      <div class="status-sep"></div>
+      <div class="status-item">
+        DEVICE: <span class="status-accent">JX-SCARA-02</span>
+      </div>
+      <div class="status-sep"></div>
+      <div class="status-item">
+        SOLVER: <span class="status-accent">DLS-IK</span>
+      </div>
+      <div style="flex:1"></div>
+      <div class="status-item">
+        FPS: <span class="status-accent" id="status-fps">60</span>
+      </div>
+    </footer>
+
   </div>
 
-  <!-- Hidden elements needed by ScaraUIController (preserved to avoid null refs) -->
+  <!-- Hidden elements to keep ScaraUIController.js happy without modifying it in Phase 1 -->
   <div style="display:none">
     <div id="tabBar"></div>
     <div id="pane-fk"></div><div id="pane-ik"></div><div id="pane-jac"></div><div id="pane-task"></div>
@@ -90,13 +196,6 @@
     <input type="range" id="fk-q3" min="0" max="350" value="0" step="1">
     <input type="range" id="fk-q4" min="-180" max="180" value="0" step="1">
     <span id="fk-q1v">0</span><span id="fk-q2v">0</span><span id="fk-q3v">0</span><span id="fk-q4v">0</span>
-    <input type="range" id="ik-xt" min="-0.55" max="0.55" value="0.40" step="0.005">
-    <input type="range" id="ik-yt" min="-0.55" max="0.55" value="0.10" step="0.005">
-    <input type="range" id="ik-zt" min="0.05" max="0.35" value="0.30" step="0.005">
-    <input type="range" id="ik-lambda" min="0.01" max="0.5" value="0.08" step="0.01">
-    <input type="range" id="ik-maxiter" min="20" max="500" value="150" step="10">
-    <span id="ik-xtv"></span><span id="ik-ytv"></span><span id="ik-ztv"></span>
-    <span id="ik-lambdav"></span><span id="ik-maxiterv"></span>
     <span id="ik-t1"></span><span id="ik-t2"></span><span id="ik-d3"></span><span id="ik-t4"></span>
     <span id="ik-err"></span><span id="ik-conv"></span><span id="ik-iter"></span>
     <span id="fk-ox"></span><span id="fk-oy"></span><span id="fk-oz"></span>
@@ -117,5 +216,4 @@
 
   <script type="module" src="/src/scara-main.js"></script>
 </body>
-
 </html>

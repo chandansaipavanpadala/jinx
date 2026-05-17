@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { fk, SCARA_DH_CONFIG } from '../math/KinematicsNDOF.js';
+import { dhPositionToThree } from '../model/RobotModel.js';
 
 const TRAIL_N = 80;
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -26,8 +27,8 @@ export default class ScaraSceneManager {
 
     // ── Scene ──
     this._scene = new THREE.Scene();
-    this._scene.background = new THREE.Color(0x0a0c12);
-    this._scene.fog = new THREE.Fog(0x0a0c12, 3.5, 7.0);
+    this._scene.background = new THREE.Color(0x17181c);
+    this._scene.fog = new THREE.Fog(0x17181c, 3.5, 8.0);
 
     // ── Camera ──
     this._camera = new THREE.PerspectiveCamera(50, wrap.clientWidth / wrap.clientHeight, 0.01, 10);
@@ -110,12 +111,14 @@ export default class ScaraSceneManager {
 
     // ── Resize ──
     this._wrap = wrap;
-    window.addEventListener('resize', () => {
+    const resizeObserver = new ResizeObserver(() => {
       const w = this._wrap.clientWidth, h = this._wrap.clientHeight;
+      if (w === 0 || h === 0) return;
       this._camera.aspect = w / h;
       this._camera.updateProjectionMatrix();
       this._renderer.setSize(w, h);
     });
+    resizeObserver.observe(this._wrap);
   }
 
   /* ════════════════════════════════════════════════════════
@@ -124,70 +127,59 @@ export default class ScaraSceneManager {
   _initLighting() {
     const s = this._scene;
 
-    // Ambient — cool blue-white factory ambience
-    s.add(new THREE.AmbientLight(0x8090c8, 0.75));
+    // Subtle white ambient fill
+    this._lAmb = new THREE.AmbientLight(0xffffff, 0.4);
+    s.add(this._lAmb);
 
-    // Main overhead — bright clinical white, slight blue tint
-    const sun = new THREE.DirectionalLight(0xe0ecff, 1.4);
-    sun.position.set(1.5, 4.0, 1.0);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.bias = -0.0003;
-    sun.shadow.camera.near = 0.1;
-    sun.shadow.camera.far = 12;
-    sun.shadow.camera.top = sun.shadow.camera.right = 2.5;
-    sun.shadow.camera.bottom = sun.shadow.camera.left = -2.5;
-    s.add(sun);
+    // Primary studio light (key light)
+    this._lMain = new THREE.DirectionalLight(0xffffff, 1.2);
+    this._lMain.position.set(2, 4, 3);
+    this._lMain.castShadow = true;
+    this._lMain.shadow.camera.left = -2;
+    this._lMain.shadow.camera.right = 2;
+    this._lMain.shadow.camera.top = 2;
+    this._lMain.shadow.camera.bottom = -2;
+    this._lMain.shadow.mapSize.set(1024, 1024);
+    this._lMain.shadow.bias = -0.0005;
+    s.add(this._lMain);
 
-    // Second overhead panel — opposite side for even fill
-    const sun2 = new THREE.DirectionalLight(0xd8e4ff, 0.8);
-    sun2.position.set(-1.5, 3.5, -1.0);
-    s.add(sun2);
+    // Soft hemisphere light (sky/ground fill)
+    this._lHemi = new THREE.HemisphereLight(0xe8f0ff, 0x444444, 0.8);
+    s.add(this._lHemi);
 
-    // Cool fill — simulates reflected factory floor light
-    const fill = new THREE.DirectionalLight(0x90b0d0, 0.4);
-    fill.position.set(-2, 1.0, 0.5);
-    s.add(fill);
-
-    // Subtle warm accent (safety indicator vibe)
-    const accent = new THREE.DirectionalLight(0xffcc44, 0.15);
-    accent.position.set(0.5, 0.5, -2);
-    s.add(accent);
+    // Rim light (for definition)
+    const rim = new THREE.DirectionalLight(0xffffff, 0.4);
+    rim.position.set(-2, 1, -2);
+    s.add(rim);
   }
 
   /* ════════════════════════════════════════════════════════
      Materials
      ════════════════════════════════════════════════════════ */
   _initMaterials() {
-    this._mBase = new THREE.MeshPhysicalMaterial({
-      color: 0x1a1a2e, roughness: 0.25, metalness: 0.85,
-      clearcoat: 0.8, clearcoatRoughness: 0.1, envMapIntensity: 1.5
+    this._mBase = new THREE.MeshStandardMaterial({
+      color: 0x333333, roughness: 0.8, metalness: 0.2
     });
-    this._mArm = new THREE.MeshPhysicalMaterial({
-      color: 0xe8e8e8, roughness: 0.12, metalness: 0.6,
-      clearcoat: 1.0, clearcoatRoughness: 0.05, envMapIntensity: 1.2
+    this._mArm = new THREE.MeshStandardMaterial({
+      color: 0x4a4a4e, roughness: 0.8, metalness: 0.2
     });
-    this._mJoint = new THREE.MeshPhysicalMaterial({
-      color: 0xC8A200, roughness: 0.05, metalness: 0.95,
-      clearcoat: 1.0, envMapIntensity: 2.0
+    this._mJoint = new THREE.MeshStandardMaterial({
+      color: 0x2d2d30, roughness: 0.7, metalness: 0.3
     });
-    this._mShaft = new THREE.MeshPhysicalMaterial({
-      color: 0x909090, roughness: 0.15, metalness: 0.9,
-      envMapIntensity: 1.0
+    this._mShaft = new THREE.MeshStandardMaterial({
+      color: 0x888888, roughness: 0.2, metalness: 0.8
     });
-    this._mEE = new THREE.MeshPhysicalMaterial({
-      color: 0xCC2222, roughness: 0.15, metalness: 0.5,
-      clearcoat: 1.0, clearcoatRoughness: 0.05, envMapIntensity: 1.4
+    this._mEE = new THREE.MeshStandardMaterial({
+      color: 0xCC2222, roughness: 0.3, metalness: 0.4
     });
-    this._mTgt = new THREE.MeshPhysicalMaterial({
-      color: 0x00e5ff, emissive: 0x0088ff, emissiveIntensity: 1.0,
-      roughness: 0.1, metalness: 0.8, clearcoat: 1.0
+    this._mTgt = new THREE.MeshStandardMaterial({
+      color: 0x3a96dd, roughness: 0.3, metalness: 0.8
     });
     this._mTrail = new THREE.MeshBasicMaterial({
-      color: 0x00e5ff, transparent: true, opacity: 0.6, depthWrite: false
+      color: 0x3a96dd, transparent: true, opacity: 0.3, depthWrite: false
     });
     this._mBeam = new THREE.LineDashedMaterial({
-      color: 0x00e5ff, dashSize: 0.02, gapSize: 0.01
+      color: 0x3a96dd, dashSize: 0.02, gapSize: 0.01, transparent: true, opacity: 0.4
     });
   }
 
@@ -202,9 +194,8 @@ export default class ScaraSceneManager {
     const s = this._scene;
 
     // ── 1. Polished concrete factory floor ──
-    const floorMat = new THREE.MeshPhysicalMaterial({
-      color: 0x1a1d24, roughness: 0.75, metalness: 0.15,
-      clearcoat: 0.25, clearcoatRoughness: 0.6,
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1a1c, roughness: 0.8,
     });
     const floorG = new THREE.PlaneGeometry(8, 8);
     floorG.rotateX(-Math.PI / 2);
@@ -213,10 +204,19 @@ export default class ScaraSceneManager {
     floor.receiveShadow = true;
     s.add(floor);
 
-    // Floor grid — subtle cyan-tinted industrial lines
-    const floorGrid = new THREE.GridHelper(6, 48, 0x1a2838, 0x141c28);
-    floorGrid.position.y = -0.756;
-    s.add(floorGrid);
+    // Dual-layer Engineering Grid (Phase 4A)
+    const majorGrid = new THREE.GridHelper(8, 16, 0x444444, 0x333333);
+    majorGrid.position.y = -0.758;
+    majorGrid.material.transparent = true;
+    majorGrid.material.opacity = 0.18;
+    majorGrid.name = "majorGrid";
+    s.add(majorGrid);
+
+    const minorGrid = new THREE.GridHelper(8, 80, 0x222222, 0x1a1a1c);
+    minorGrid.position.y = -0.759;
+    minorGrid.material.opacity = 0.18;
+    minorGrid.material.transparent = true;
+    s.add(minorGrid);
 
     // ── 2. Hazard floor markings (yellow safety stripes around robot base) ──
     const hazardMat = new THREE.MeshStandardMaterial({
@@ -505,18 +505,31 @@ export default class ScaraSceneManager {
     this._eeMesh.castShadow = true;
     grp.add(this._eeMesh);
 
-    // ── Clickable Link Mesh Registry ──
-    // Each entry: { mesh, dhIndex, dhKey, label, defaultLen, min, max }
-    // dhIndex = which row in SCARA_DH_CONFIG;  dhKey = 'a' or 'd'
     this._linkMeshes = [
-      { mesh: this._link1, dhIndex: 0, dhKey: 'a', label: 'Upper Arm (a₁)',
-        defaultLen: L1, min: 0.10, max: 0.50 },
-      { mesh: this._link2, dhIndex: 1, dhKey: 'a', label: 'Forearm (a₂)',
-        defaultLen: L2, min: 0.08, max: 0.45 },
+      { mesh: this._link1, dhIndex: 0, dhKey: 'a', label: 'Link 1 (Shoulder)', defaultLen: L1, min: 0.10, max: 0.60 },
+      { mesh: this._link2, dhIndex: 1, dhKey: 'a', label: 'Link 2 (Elbow)',    defaultLen: L2, min: 0.10, max: 0.60 },
     ];
     this._highlightedLink = -1;
-    this._savedEmissive = null;
-    this._savedEmissiveIntensity = 0;
+
+    // Coordinate Frames (Phase 4A)
+    this._axesHelpers = [];
+    [this._link1, this._link2, this._shaft, this._eeMesh].forEach(parent => {
+      const axes = new THREE.AxesHelper(0.12);
+      axes.visible = false;
+      parent.add(axes);
+      this._axesHelpers.push(axes);
+    });
+
+    // Manipulability Ellipsoid (Phase 4.2)
+    this._ellipsoid = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 32, 24),
+      new THREE.MeshStandardMaterial({
+        color: 0x00ff80, transparent: true, opacity: 0.35,
+        depthWrite: false, side: THREE.DoubleSide
+      })
+    );
+    this._ellipsoid.visible = false;
+    s.add(this._ellipsoid);
 
     // ── Vertical drop-line (visual guide) — persistent reusable Line ──
     this._dropLineMat = new THREE.LineDashedMaterial({
@@ -537,35 +550,30 @@ export default class ScaraSceneManager {
   _initTargetAndTrail() {
     const s = this._scene;
 
-    this._mTgtS = new THREE.Mesh(new THREE.SphereGeometry(0.018, 20, 20), this._mTgt);
-    this._mTgtS.castShadow = true;
-    s.add(this._mTgtS);
+    // Engineering Target Reticle
+    this._targetReticle = new THREE.Group();
+    const axis = new THREE.AxesHelper(0.08);
+    axis.raycast = () => {}; // Prevent accidental dragging via axes
+    this._targetReticle.add(axis);
+    const ringG = new THREE.TorusGeometry(0.04, 0.002, 8, 32);
+    ringG.rotateX(Math.PI/2);
+    const ring = new THREE.Mesh(ringG, this._mTgt);
+    this._targetReticle.add(ring);
+    this._targetReticle.position.set(0.35, 0.018, 0);
+    s.add(this._targetReticle);
+    this._mTgtS = this._targetReticle; // Alias for interaction
 
-    // Glow rings on table surface
-    this._glowRings = [0.07, 0.045, 0.025].map((r, i) => {
-      const m = new THREE.Mesh(
-        new THREE.CircleGeometry(r, 36),
-        new THREE.MeshBasicMaterial({
-          color: 0x00e5ff, transparent: true,
-          opacity: [0.08, 0.14, 0.22][i],
-          side: THREE.DoubleSide, depthWrite: false
-        })
-      );
-      m.rotation.x = -Math.PI / 2;
-      m.position.y = 0.001;
-      s.add(m);
-      return m;
-    });
+    // Glow rings removed for engineering clarity
+
 
     this._beamLine = null;
 
-    // Trail
-    this._trailMeshes = Array.from({ length: TRAIL_N }, () => {
-      const m = new THREE.Mesh(new THREE.SphereGeometry(0.005, 6, 6), this._mTrail.clone());
-      m.visible = false;
-      s.add(m);
-      return m;
-    });
+    // Dynamic Trail (Line-based)
+    const trailG = new THREE.BufferGeometry();
+    const trailPosArr = new Float32Array(TRAIL_N * 3);
+    trailG.setAttribute('position', new THREE.BufferAttribute(trailPosArr, 3));
+    this._trailLine = new THREE.Line(trailG, this._mTrail);
+    s.add(this._trailLine);
     this._trailIdx = 0;
 
     // ── Payload (pick object) ──
@@ -751,15 +759,10 @@ export default class ScaraSceneManager {
     this._dropLine.computeLineDistances();
     oldDlGeo.dispose();
 
-    // ── Target sphere + glow + beam ──
+    // ── Target reticle + beam ──
     if (pTgt3) {
-      this._mTgtS.visible = true;
-      this._mTgtS.position.copy(pTgt3);
-      this._glowRings.forEach(r => {
-        r.position.x = pTgt3.x;
-        r.position.z = pTgt3.z;
-        r.visible = true;
-      });
+      this._targetReticle.visible = true;
+      this._targetReticle.position.copy(pTgt3);
       if (this._beamLine) {
         this._scene.remove(this._beamLine);
         this._beamLine.geometry.dispose();
@@ -770,8 +773,7 @@ export default class ScaraSceneManager {
       this._beamLine.computeLineDistances();
       this._scene.add(this._beamLine);
     } else {
-      this._mTgtS.visible = false;
-      this._glowRings.forEach(r => (r.visible = false));
+      this._targetReticle.visible = false;
       if (this._beamLine) {
         this._scene.remove(this._beamLine);
         this._beamLine.geometry.dispose();
@@ -794,17 +796,26 @@ export default class ScaraSceneManager {
      Trail
      ════════════════════════════════════════════════════════ */
   addTrailPoint(pos3) {
-    const mesh = this._trailMeshes[this._trailIdx % TRAIL_N];
-    mesh.position.copy(pos3);
-    mesh.visible = true;
-    this._trailMeshes.forEach((m, i) => {
-      if (m.visible) m.material.opacity = 0.12 + 0.5 * (i / TRAIL_N);
-    });
+    if (!this._trailLine) return;
+    const posAttr = this._trailLine.geometry.attributes.position;
+    const arr = posAttr.array;
+
+    // Shift back
+    for (let i = TRAIL_N - 1; i > 0; i--) {
+      arr[i * 3]     = arr[(i - 1) * 3];
+      arr[i * 3 + 1] = arr[(i - 1) * 3 + 1];
+      arr[i * 3 + 2] = arr[(i - 1) * 3 + 2];
+    }
+    arr[0] = pos3.x; arr[1] = pos3.y; arr[2] = pos3.z;
+    posAttr.needsUpdate = true;
     this._trailIdx++;
   }
 
   resetTrail() {
-    this._trailMeshes.forEach(m => (m.visible = false));
+    if (!this._trailLine) return;
+    const arr = this._trailLine.geometry.attributes.position.array;
+    arr.fill(0);
+    this._trailLine.geometry.attributes.position.needsUpdate = true;
     this._trailIdx = 0;
   }
 
@@ -1017,6 +1028,79 @@ export default class ScaraSceneManager {
   }
 
   /* ════════════════════════════════════════════════════════
+     Workspace overlay (RoboAnalyzer reachability)
+     ════════════════════════════════════════════════════════ */
+
+  _ensureWorkspaceGroup() {
+    if (this._wsGroup) return;
+    this._wsGroup = new THREE.Group();
+    this._wsGroup.name = 'workspaceOverlay';
+    this._scene.add(this._wsGroup);
+  }
+
+  /**
+   * Plot workspace sample cells in the 3D scene (DH → Three mapping).
+   * @param {Array<{x,y,z,status,mu}>} cells
+   * @param {boolean} visible
+   */
+  setWorkspaceOverlay(cells, visible = true) {
+    this._ensureWorkspaceGroup();
+    this.clearWorkspaceOverlay();
+
+    if (!visible || !cells?.length) {
+      this._wsGroup.visible = false;
+      return;
+    }
+
+    const show = cells.filter((c) => c.status !== 'unreachable');
+    if (!show.length) {
+      this._wsGroup.visible = false;
+      return;
+    }
+
+    const geo = new THREE.SphereGeometry(0.007, 6, 4);
+    const mat = new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.88,
+      depthWrite: false,
+    });
+    const mesh = new THREE.InstancedMesh(geo, mat, show.length);
+    const color = new THREE.Color();
+    const m = new THREE.Matrix4();
+    const pos = new THREE.Vector3();
+
+    show.forEach((cell, i) => {
+      const p = dhPositionToThree(cell.x, cell.y, cell.z);
+      pos.set(p.x, p.y, p.z);
+      m.makeTranslation(pos.x, pos.y, pos.z);
+      mesh.setMatrixAt(i, m);
+      if (cell.status === 'reachable') {
+        const t = Math.min(1, (cell.mu || 0) * 35);
+        color.setHSL(0.38 + t * 0.12, 0.85, 0.42 + t * 0.2);
+      } else {
+        color.setRGB(1, 0.4, 0.15);
+      }
+      mesh.setColorAt(i, color);
+    });
+
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    this._wsGroup.add(mesh);
+    this._wsGroup.visible = true;
+  }
+
+  clearWorkspaceOverlay() {
+    if (!this._wsGroup) return;
+    while (this._wsGroup.children.length) {
+      const child = this._wsGroup.children[0];
+      child.geometry?.dispose();
+      child.material?.dispose();
+      this._wsGroup.remove(child);
+    }
+  }
+
+  /* ════════════════════════════════════════════════════════
      Getters
      ════════════════════════════════════════════════════════ */
   get camera()       { return this._camera; }
@@ -1041,4 +1125,38 @@ export default class ScaraSceneManager {
 
   /** Register callback for object drag sync: (mesh) => void */
   set onObjectDragged(fn) { this._onObjectDragged = fn; }
+
+  /** Toggle wireframe on all robot meshes */
+  setWireframe(active) {
+    this._scene.traverse(o => {
+      if (o.isMesh && (o.material.color || o.material.emissive)) {
+        // Expose grid and floor from wireframe
+        if (o.name === "majorGrid" || o.type === "GridHelper") return;
+        o.material.wireframe = active;
+      }
+    });
+  }
+
+  /** Toggle coordinate frames visibility */
+  setAxesVisible(active) {
+    this._axesHelpers.forEach(ax => ax.visible = active);
+  }
+
+  /**
+   * Update the Manipulability Ellipsoid at the End Effector.
+   */
+  updateEllipsoid(visible, singularValues, rotation, mu, pos) {
+    if (!this._ellipsoid) return;
+    this._ellipsoid.visible = visible;
+    if (!visible) return;
+
+    this._ellipsoid.position.copy(pos);
+    const s = singularValues.map(v => Math.max(v * 0.25, 0.001));
+    this._ellipsoid.scale.set(s[0], s[1], s[2]);
+    if (rotation) this._ellipsoid.setRotationFromMatrix(rotation);
+    
+    // Green (High Mu) -> Red (Singular)
+    const normMu = Math.min(mu * 50.0, 1.0);
+    this._ellipsoid.material.color.setHSL(0.35 * normMu, 1.0, 0.5);
+  }
 }

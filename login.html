@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — JINX</title>
+  <meta name="description" content="Sign in to your JINX robotics workstation." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/login.css" />
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-split">
+      <aside class="login-hero">
+        <div class="login-hero-fog" aria-hidden="true"></div>
+        <div class="login-hero-copy">
+          <div class="login-brand">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+            </svg>
+            <div>
+              <div class="login-brand-name">JINX</div>
+              <div class="login-brand-tag">Joint Inverse N-dimensional Explorer</div>
+            </div>
+          </div>
+          <div class="login-hero-content">
+            <h1>Explore. Simulate. Analyze. All in One Workspace.</h1>
+            <p>JINX is your robotics workstation for simulation, analysis, and automation.</p>
+          </div>
+        </div>
+        <div class="login-hero-scene">
+          <div class="login-hero-floor">
+            <svg class="login-hero-panel-grid" viewBox="0 0 1000 720" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+              <defs>
+                <linearGradient id="loginPanelGridFadeY" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#fff" stop-opacity="0" />
+                  <stop offset="18%" stop-color="#fff" stop-opacity="0" />
+                  <stop offset="38%" stop-color="#fff" stop-opacity="0.12" />
+                  <stop offset="55%" stop-color="#fff" stop-opacity="0.45" />
+                  <stop offset="78%" stop-color="#fff" stop-opacity="0.82" />
+                  <stop offset="100%" stop-color="#fff" stop-opacity="1" />
+                </linearGradient>
+                <linearGradient id="loginPanelGridFadeX" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#fff" stop-opacity="0" />
+                  <stop offset="6%" stop-color="#fff" stop-opacity="0.65" />
+                  <stop offset="94%" stop-color="#fff" stop-opacity="0.65" />
+                  <stop offset="100%" stop-color="#fff" stop-opacity="0" />
+                </linearGradient>
+                <mask id="loginPanelGridMask">
+                  <rect width="1000" height="720" fill="url(#loginPanelGridFadeY)" />
+                  <rect width="1000" height="720" fill="url(#loginPanelGridFadeX)" />
+                </mask>
+              </defs>
+              <g mask="url(#loginPanelGridMask)" fill="none" stroke="#388bfd" stroke-width="0.9" opacity="0.5">
+                <line x1="500" y1="72" x2="-280" y2="720" />
+                <line x1="500" y1="72" x2="-120" y2="720" />
+                <line x1="500" y1="72" x2="0" y2="720" />
+                <line x1="500" y1="72" x2="125" y2="720" />
+                <line x1="500" y1="72" x2="250" y2="720" />
+                <line x1="500" y1="72" x2="375" y2="720" />
+                <line x1="500" y1="72" x2="500" y2="720" />
+                <line x1="500" y1="72" x2="625" y2="720" />
+                <line x1="500" y1="72" x2="750" y2="720" />
+                <line x1="500" y1="72" x2="875" y2="720" />
+                <line x1="500" y1="72" x2="1000" y2="720" />
+                <line x1="500" y1="72" x2="1280" y2="720" />
+                <line x1="380" y1="165" x2="620" y2="165" />
+                <line x1="300" y1="220" x2="700" y2="220" />
+                <line x1="220" y1="275" x2="780" y2="275" />
+                <line x1="140" y1="330" x2="860" y2="330" />
+                <line x1="60" y1="385" x2="940" y2="385" />
+                <line x1="-20" y1="440" x2="1020" y2="440" />
+                <line x1="-100" y1="495" x2="1100" y2="495" />
+                <line x1="-180" y1="550" x2="1180" y2="550" />
+                <line x1="-260" y1="605" x2="1260" y2="605" />
+                <line x1="-340" y1="660" x2="1340" y2="660" />
+                <line x1="-280" y1="720" x2="1280" y2="720" />
+              </g>
+            </svg>
+          </div>
+          <div class="login-hero-robot-stage">
+            <img
+              class="login-robot-image"
+              src="/images/login-robot.png"
+              alt="RRR robotic arm wireframe illustration"
+              width="640"
+              height="640"
+              loading="eager"
+              decoding="async"
+            />
+          </div>
+        </div>
+      </aside>
+
+      <main class="login-form-panel">
+        <div class="login-card">
+          <h2 id="form-title">Welcome back</h2>
+          <p class="subtitle" id="form-subtitle">Sign in to your JINX account</p>
+
+          <div class="login-error" id="login-error" role="alert"></div>
+
+          <form id="auth-form" novalidate>
+            <div class="login-field" id="field-display-name" style="display: none;">
+              <label for="display-name">Display name</label>
+              <div class="login-input-wrap">
+                <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                <input type="text" id="display-name" name="displayName" placeholder="Your name" autocomplete="name" />
+              </div>
+            </div>
+
+            <div class="login-field">
+              <label for="email">Email</label>
+              <div class="login-input-wrap">
+                <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                <input type="email" id="email" name="email" placeholder="Enter your email" required autocomplete="email" />
+              </div>
+            </div>
+
+            <div class="login-field">
+              <label for="password">Password</label>
+              <div class="login-input-wrap">
+                <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <input type="password" id="password" name="password" placeholder="Enter your password" required autocomplete="current-password" minlength="6" />
+                <button type="button" class="login-toggle-pw" id="toggle-password" aria-label="Show password">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="login-field" id="field-confirm-password" style="display: none;">
+              <label for="confirm-password">Confirm password</label>
+              <div class="login-input-wrap">
+                <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <input type="password" id="confirm-password" name="confirmPassword" placeholder="Confirm your password" autocomplete="new-password" minlength="6" />
+              </div>
+            </div>
+
+            <div class="login-row" id="login-options">
+              <label class="login-remember">
+                <input type="checkbox" id="remember-me" checked />
+                Remember me
+              </label>
+              <a href="#" class="login-link" id="forgot-password">Forgot password?</a>
+            </div>
+
+            <button type="submit" class="btn-sign-in" id="submit-btn">Sign In</button>
+          </form>
+
+          <div class="login-divider">OR</div>
+          <button type="button" class="btn-sso" id="sso-btn" disabled title="Single-user mode only">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            Sign in with SSO
+          </button>
+
+          <p class="login-card-footer" id="card-footer">
+            Don't have an account? <a href="#" class="login-link" id="setup-link">Create your profile</a>
+          </p>
+        </div>
+      </main>
+    </div>
+
+    <footer class="login-page-footer">
+      <span>© <span id="year"></span> JINX Robotics. All rights reserved.</span>
+      <nav>
+        <a href="index.html">v3.0.0</a>
+        <a href="index.html">Documentation</a>
+        <a href="#">Support</a>
+        <a href="#">Privacy Policy</a>
+      </nav>
+    </footer>
+  </div>
+
+  <div class="login-modal-overlay" id="reset-modal">
+    <div class="login-modal" role="dialog" aria-labelledby="reset-title">
+      <h3 id="reset-title">Reset password</h3>
+      <p>Enter your registered email and a new password for this workstation.</p>
+      <form id="reset-form">
+        <div class="login-field">
+          <label for="reset-email">Email</label>
+          <div class="login-input-wrap">
+            <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+            <input type="email" id="reset-email" required placeholder="Your email" />
+          </div>
+        </div>
+        <div class="login-field">
+          <label for="reset-password">New password</label>
+          <div class="login-input-wrap">
+            <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <input type="password" id="reset-password" required minlength="6" placeholder="New password" />
+          </div>
+        </div>
+        <div class="login-error" id="reset-error" role="alert"></div>
+        <div class="login-modal-actions">
+          <button type="button" class="btn-ghost" id="reset-cancel">Cancel</button>
+          <button type="submit" class="btn-sign-in" style="width: auto;">Update password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/src/login-main.js"></script>
+</body>
+</html>

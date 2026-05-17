@@ -1,129 +1,278 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>3-DOF RRR Occlusion-Avoidance Lamp — JINX Simulator</title>
-  <meta name="description"
-    content="3-DOF RRR robotic desk lamp: IK, Jacobian analysis, occlusion-avoidance simulation.">
+  <title>RRR Shadow Lamp Workspace — JINX Simulator</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
+  <script type="module" src="../auth/workspace-guard.js"></script>
 </head>
-
-<body>
-  <div class="layout">
-
-      <!-- Header -->
-      <div class="hbar">
-        <a href="../../index.html" class="back-btn">← Home</a>
-        <div>
-        <div class="htitle">3-DOF RRR Occlusion-Avoidance Lamp<span class="badge">3D Simulator</span></div>
-        <div class="hsub">Closed-form IK · Analytical Jacobian · Occlusion Avoidance · DH Convention</div>
-      </div>
+<body data-workspace="rrr">
+  <div class="workstation">
+    
+    <!-- TOOLBAR -->
+    <div class="toolbar" id="toolbar">
+      <div class="toolbar-title">JINX // RRR SHADOW LAMP</div>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn active" id="btn-orbit">ORBIT</button>
+      <button class="toolbar-btn" id="btn-pan">PAN</button>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn" id="btn-wireframe">WIREFRAME</button>
+      <button class="toolbar-btn" id="btn-frames">FRAMES</button>
+      <button class="toolbar-btn" id="btn-ellipsoid">DIAGNOSTICS</button>
+      <button class="toolbar-btn" id="btn-math-panel">MATH DASHBOARD</button>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn" id="shadowDemoBtn">SHADOW DEMO</button>
+      <button class="toolbar-btn primary" id="sbtn">RUN SIMULATION</button>
+      <button class="toolbar-btn" id="resetBtn">RESET POSE</button>
+      <div style="flex:1"></div>
+      <a href="../../index.html" class="toolbar-btn">LAUNCHER</a>
     </div>
 
-    <div class="body-row">
-
-      <!-- 3D Canvas (now takes full width) -->
-      <div id="cw">
-        <div class="hud" id="hud">
-          <div><b>θ₁</b> <span id="h1">—</span>&ensp;<b>θ₂</b> <span id="h2">—</span>&ensp;<b>θ₃</b> <span
-              id="h3">—</span></div>
-          <div><b>Head</b> <span id="hHead">—</span></div>
-          <div><b>μ (manip)</b> <span id="hMu">—</span></div>
-          <div><b>Status</b> <span id="hStat" class="ok">—</span></div>
-        </div>
-        <!-- Camera POV mini viewport -->
-        <div id="camPov"></div>
-        <div class="pov-label">Camera POV</div>
-        <div class="cam-hint">Drag to orbit · Scroll to zoom · Right-drag to pan</div>
-
-        <!-- ═══ Minimal Control Bar ═══ -->
-        <div class="sim-control-bar" id="simControlBar">
-          <button class="sim-btn sim-btn-primary" id="sbtn">▶ Run Simulation</button>
-          <button class="sim-btn sim-btn-secondary" id="btn-math-panel">📐 Open Math Panel</button>
-          <button class="sim-btn sim-btn-ghost" id="resetBtn">⟲ Reset</button>
-        </div>
-
-        <!-- ═══ Link Detail Card (hidden by default) ═══ -->
-        <div class="link-card" id="linkCard">
-          <div class="link-card-header">
-            <span class="link-card-icon">🔗</span>
-            <span class="link-card-title" id="linkCardTitle">Link</span>
-            <button class="link-card-close" id="linkCardClose">✕</button>
+    <!-- WORKSPACE -->
+    <div class="workspace">
+      
+      <!-- HIERARCHY PANEL (Left) -->
+      <aside class="sidebar sidebar-left" id="hierarchy">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">SCENE HIERARCHY</div>
+          <div class="sidebar-section-body" style="padding: 0;">
+            <div class="tree-item"><span class="tree-icon">⛒</span> WORLD ORIGIN</div>
+            <div class="tree-item"><span class="tree-icon">⚙</span> BASE <span class="badge" id="tree-t1">0.00°</span></div>
+            <div class="tree-item" data-link="0"><span class="tree-icon">🔗</span> LINK 1 (COLUMN)</div>
+            <div class="tree-item"><span class="tree-icon">⚙</span> JOINT 2 <span class="badge" id="tree-t2">0.00°</span></div>
+            <div class="tree-item" data-link="1"><span class="tree-icon">🔗</span> LINK 2 (ARM)</div>
+            <div class="tree-item"><span class="tree-icon">⚙</span> JOINT 3 <span class="badge" id="tree-t3">0.00°</span></div>
+            <div class="tree-item" data-link="2"><span class="tree-icon">🔗</span> LINK 3 (LAMP)</div>
+            <div class="tree-item"><span class="tree-icon">✋</span> HAND (OCCLUDER)</div>
+            <div class="tree-item"><span class="tree-icon">📄</span> WORKSPACE PATCH</div>
+            <div class="tree-item active"><span class="tree-icon">🎯</span> END EFFECTOR</div>
           </div>
-          <div class="link-card-body">
-            <div class="link-card-readout">
-              <span class="link-card-label">Length</span>
-              <span class="link-card-value" id="linkCardValue">0.000 m</span>
+        </div>
+      </aside>
+
+      <!-- 3D VIEWPORT -->
+      <div class="viewport" id="cw">
+        
+        <!-- HUD Overlay (Engineering Card) -->
+        <div class="hud-card" id="hud">
+          <div class="hud-row"><span class="hud-label">FPS</span><span class="hud-value">60</span></div>
+          <div style="height:4px; border-bottom:1px solid var(--border); margin-bottom:4px;"></div>
+          <div class="hud-row"><span class="hud-label">JOINT 1</span><span class="hud-value" id="h1">0.0°</span></div>
+          <div class="hud-row"><span class="hud-label">JOINT 2</span><span class="hud-value" id="h2">0.0°</span></div>
+          <div class="hud-row"><span class="hud-label">JOINT 3</span><span class="hud-value" id="h3">0.0°</span></div>
+          <div style="height:4px; border-bottom:1px solid var(--border); margin-bottom:4px; margin-top:2px;"></div>
+          <div class="hud-row"><span class="hud-label">POSITION</span><span class="hud-value" id="hHead">[0, 0, 0]</span></div>
+          <div class="hud-row"><span class="hud-label">MANIP (μ)</span><span class="hud-value" id="hMu">1.000</span></div>
+          <div class="hud-row"><span class="hud-label">STATUS</span><span class="hud-value ok" id="hStat">READY</span></div>
+        </div>
+        
+        <div class="hud-card shadow-hud" id="shadowHud">
+          <div class="hud-row"><span class="hud-label">SHADOW DEMO</span><span class="hud-value ok" id="shadowMode">—</span></div>
+          <div style="height:4px; border-bottom:1px solid var(--border); margin:4px 0;"></div>
+          <div class="hud-row"><span class="hud-label">HAND p_t</span><span class="hud-value" id="shadowPt">—</span></div>
+          <div class="hud-row"><span class="hud-label">LAMP p_d</span><span class="hud-value" id="shadowPd">—</span></div>
+          <div class="hud-row"><span class="hud-label">DESK RISK</span><span class="hud-value ok" id="shadowRisk">—</span></div>
+          <div class="hud-row"><span class="hud-label">IK ERR</span><span class="hud-value" id="shadowIkErr">—</span></div>
+        </div>
+        <div class="cam-hint">Orbit · Drag hand in shadow demo · Shift+drag target · Scroll zoom</div>
+        
+        <!-- Context Popup (Link Resizer) -->
+        <div class="context-popup" id="linkCard">
+          <div class="context-header">
+            <span id="linkCardTitle">Link</span>
+            <button class="context-close" id="linkCardClose">✕</button>
+          </div>
+          <div class="context-body">
+            <div class="inspector-row">
+              <span class="inspector-label">Length</span>
+              <span class="inspector-value" id="linkCardValue">0.000 m</span>
             </div>
-            <input type="range" class="link-card-slider" id="linkCardSlider" min="0.05" max="0.50" value="0.30" step="0.005">
-            <div class="link-card-range">
+            <input type="range" class="eng-slider" id="linkCardSlider" min="0.05" max="0.50" value="0.30" step="0.005">
+            <div class="inspector-row" style="font-size: 10px; color: var(--text-dim);">
               <span id="linkCardMin">0.05</span>
-              <span class="link-card-default" id="linkCardDefault">default: 0.30 m</span>
+              <span id="linkCardDefault">default: 0.30 m</span>
               <span id="linkCardMax">0.50</span>
             </div>
-            <button class="link-card-reset" id="linkCardReset">⟲ Reset to Default</button>
+            <button class="toolbar-btn" style="width:100%; border:1px solid var(--border);" id="linkCardReset">Reset Default</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- INSPECTOR PANEL (Right) -->
+      <aside class="sidebar sidebar-right" id="inspector">
+        
+        <!-- Target Pose Section -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">End Effector Target</div>
+          <div class="sidebar-section-body">
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Target X</span>
+                <span class="inspector-value" id="xdv">0.28</span>
+              </div>
+              <input type="range" class="eng-slider" id="xd" min="-0.15" max="0.85" value="0.28" step="0.01">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Target Y</span>
+                <span class="inspector-value" id="ydv">0.14</span>
+              </div>
+              <input type="range" class="eng-slider" id="yd" min="-0.30" max="0.30" value="0.14" step="0.01">
+            </div>
+            <div class="field-group" style="margin-top: 8px;">
+              <select class="num-input" id="elbow">
+                <option value="1">Elbow-up (+)</option>
+                <option value="-1">Elbow-down (-)</option>
+              </select>
+            </div>
           </div>
         </div>
 
-      </div>
+        <!-- Simulation Params Section -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">Simulation Parameters</div>
+          <div class="sidebar-section-body">
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Speed</span>
+                <span class="inspector-value" id="spdv">1.0</span>
+              </div>
+              <input type="range" class="eng-slider" id="spd" min="0.2" max="4" value="1" step="0.1">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Radius (hR)</span>
+                <span class="inspector-value" id="hRv">0.08</span>
+              </div>
+              <input type="range" class="eng-slider" id="hR" min="0.03" max="0.18" value="0.08" step="0.01">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Max Vel</span>
+                <span class="inspector-value" id="vmaxv">1.2</span>
+              </div>
+              <input type="range" class="eng-slider" id="vmax" min="0.3" max="3.0" value="1.2" step="0.1">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Max Accel</span>
+                <span class="inspector-value" id="amaxv">2.0</span>
+              </div>
+              <input type="range" class="eng-slider" id="amax" min="0.5" max="6.0" value="2.0" step="0.25">
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">Shadow Avoidance (Δ)</div>
+          <div class="sidebar-section-body">
+            <label class="inspector-row" style="cursor:pointer; margin-bottom:8px;">
+              <span class="inspector-label">Offset ON</span>
+              <input type="checkbox" id="shadowAvoid" checked style="margin-left:auto;">
+            </label>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Δx (m)</span>
+                <span class="inspector-value" id="dxv">-0.05</span>
+              </div>
+              <input type="range" class="eng-slider" id="dx" min="-0.20" max="0.20" value="-0.05" step="0.01">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Δy (m)</span>
+                <span class="inspector-value" id="dyv">0.00</span>
+              </div>
+              <input type="range" class="eng-slider" id="dy" min="-0.20" max="0.20" value="0" step="0.01">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Δz (m)</span>
+                <span class="inspector-value" id="dzv">0.15</span>
+              </div>
+              <input type="range" class="eng-slider" id="dz" min="0.05" max="0.55" value="0.15" step="0.01">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Hand path spd</span>
+                <span class="inspector-value" id="shadowSpdv">1.0×</span>
+              </div>
+              <input type="range" class="eng-slider" id="shadowSpd" min="0.2" max="3" value="1" step="0.1">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">Hand radius</span>
+                <span class="inspector-value" id="shadowHRv">0.10 m</span>
+              </div>
+              <input type="range" class="eng-slider" id="shadowHR" min="0.04" max="0.16" value="0.10" step="0.01">
+            </div>
+            <p style="font-size:10px;color:var(--text-dim);margin:8px 0 0;line-height:1.4;">Green patch = workspace. Drag the hand during demo. Toggle offset to compare shadow on desk.</p>
+          </div>
+        </div>
+
+      </aside>
 
     </div>
+
+    <!-- TERMINAL -->
+    <div class="console" id="consoleBody">
+      <div class="log-entry">
+        <span class="log-time">[00:00:00.000]</span>
+        <span class="log-tag info">SYSTEM</span>
+        <span class="log-msg">JINX WORKSTATION INITIALIZED // RRR CORE READY</span>
+      </div>
+    </div>
+
+    <!-- STATUS BAR (Bottom) -->
+    <footer class="status-bar">
+      <div class="status-item">
+        <span class="status-accent">●</span> SYSTEM READY
+      </div>
+      <div class="status-sep"></div>
+      <div class="status-item">
+        DEVICE: <span class="status-accent">JX-RRR-01</span>
+      </div>
+      <div class="status-sep"></div>
+      <div class="status-item">
+        SOLVER: <span class="status-accent">CLOSED-FORM</span>
+      </div>
+      <div style="flex:1"></div>
+      <div class="status-item">
+        FPS: <span class="status-accent" id="status-fps">60</span>
+      </div>
+    </footer>
+
   </div>
 
-  <!-- Hidden elements needed by UIController (preserved to avoid null refs) -->
+  <!-- Hidden elements to keep UIController.js happy without modifying it in Phase 1 -->
   <div style="display:none">
-    <input type="range" id="xd" min="-0.15" max="0.85" value="0.28" step="0.01">
-    <input type="range" id="yd" min="-0.30" max="0.30" value="0.14" step="0.01">
-    <input type="range" id="jxd" min="-0.15" max="0.85" value="0.28" step="0.01">
-    <input type="range" id="jyd" min="-0.30" max="0.30" value="0.14" step="0.01">
-    <select id="elbow"><option value="1">Elbow-up (+)</option></select>
-    <input type="range" id="dx" min="-0.2" max="0.1" value="-0.04" step="0.01">
-    <input type="range" id="dy" min="-0.2" max="0.2" value="0.0" step="0.01">
-    <input type="range" id="dz" min="0.20" max="0.55" value="0.45" step="0.01">
-    <input type="range" id="spd" min="0.2" max="4" value="1" step="0.1">
-    <input type="range" id="hR" min="0.03" max="0.18" value="0.08" step="0.01">
-    <input type="range" id="vmax" min="0.3" max="3.0" value="1.2" step="0.1">
-    <input type="range" id="amax" min="0.5" max="6.0" value="2.0" step="0.25">
-    <input type="range" id="cfx" value="525"><input type="range" id="cfy" value="525">
-    <input type="range" id="ccx" value="320"><input type="range" id="ccy" value="240">
-    <input type="range" id="cu" value="320"><input type="range" id="cv_" value="240">
-    <input type="range" id="czw" value="0.65">
-    <input type="range" id="ctx" value="0.0"><input type="range" id="cty" value="0.50">
-    <input type="range" id="ctz" value="0.30">
-    <span id="xdv"></span><span id="ydv"></span><span id="jxdv"></span><span id="jydv"></span>
-    <span id="dxv"></span><span id="dyv"></span><span id="dzv"></span>
-    <span id="spdv"></span><span id="hRv"></span><span id="vmaxv"></span><span id="amaxv"></span>
+    <input type="hidden" id="jxd" value="0.28">
+    <input type="hidden" id="jyd" value="0.14">
+    <input type="hidden" id="cfx" value="525"><input type="hidden" id="cfy" value="525">
+    <input type="hidden" id="ccx" value="320"><input type="hidden" id="ccy" value="240">
+    <input type="hidden" id="cu" value="320"><input type="hidden" id="cv_" value="240">
+    <input type="hidden" id="czw" value="0.65">
+    <input type="hidden" id="ctx" value="0.0"><input type="hidden" id="cty" value="0.50"><input type="hidden" id="ctz" value="0.30">
+    <span id="jxdv"></span><span id="jydv"></span>
     <span id="cfxv"></span><span id="cfyv"></span><span id="ccxv"></span><span id="ccyv"></span>
-    <span id="cuv"></span><span id="cvv"></span><span id="czwv"></span>
-    <span id="ctxv"></span><span id="ctyv"></span><span id="ctzv"></span>
+    <span id="cuv"></span><span id="cvv"></span><span id="czwv"></span><span id="ctxv"></span><span id="ctyv"></span><span id="ctzv"></span>
     <span id="ik-t1"></span><span id="ik-t2"></span><span id="ik-t3"></span>
     <span id="ik-err"></span><span id="ik-r"></span><span id="ik-z"></span><span id="ik-mu"></span>
     <span id="ox"></span><span id="oy"></span><span id="oz"></span><span id="or_"></span>
-    <span id="j11"></span><span id="j12"></span><span id="j13"></span>
-    <span id="j21"></span><span id="j22"></span><span id="j23"></span>
-    <span id="j31"></span><span id="j32"></span><span id="j33"></span>
+    <span id="j11"></span><span id="j12"></span><span id="j13"></span><span id="j21"></span><span id="j22"></span><span id="j23"></span><span id="j31"></span><span id="j32"></span><span id="j33"></span>
     <span id="detJ"></span><span id="jmu"></span><span id="sinT3"></span><span id="jreach"></span>
-    <span id="simF"></span><span id="simE"></span><span id="simT2"></span><span id="simMu"></span>
-    <span id="simPhase"></span><span id="simS"></span><span id="simSdot"></span><span id="simSddot"></span>
-    <span id="trapLabel"></span><span id="muLabel"></span>
-    <span id="camXw"></span><span id="camYw"></span><span id="camZw"></span>
-    <span id="camRx"></span><span id="camRy"></span><span id="camRz"></span><span id="camIK"></span>
-    <div id="muBar"></div>
-    <div id="ikAlert"></div><div id="limAlert"></div><div id="singWarn"></div><div id="singWarn2"></div>
-    <div id="camAlert"></div><div id="simStats"></div>
-    <canvas id="trapCvs"></canvas><canvas id="trajCvs"></canvas>
-    <button id="camApplyBtn"></button>
-    <div id="tabBar"></div>
+    <span id="simF"></span><span id="simE"></span><span id="simT2"></span><span id="simMu"></span><span id="simPhase"></span><span id="simS"></span><span id="simSdot"></span><span id="simSddot"></span>
+    <span id="trapLabel"></span><span id="muLabel"></span><span id="camXw"></span><span id="camYw"></span><span id="camZw"></span><span id="camRx"></span><span id="camRy"></span><span id="camRz"></span><span id="camIK"></span>
+    <div id="muBar"></div><div id="ikAlert"></div><div id="limAlert"></div><div id="singWarn"></div><div id="singWarn2"></div>
+    <div id="camAlert"></div><div id="simStats"></div><canvas id="trapCvs"></canvas><canvas id="trajCvs"></canvas>
+    <button id="camApplyBtn"></button><div id="tabBar"></div>
     <div id="pane-ik"></div><div id="pane-jac"></div><div id="pane-sim"></div><div id="pane-cam"></div>
+    <!-- Add POV miniview here inside invisible to not throw error, or handle it -->
+    <div id="camPov"></div>
   </div>
 
   <script type="module" src="/src/main.js"></script>
 </body>
-
 </html>

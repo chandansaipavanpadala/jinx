@@ -7,6 +7,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: 'index.html',
+        login: 'login.html',
         rrr: 'src/pages/rrr-lamp.html',
         scara: 'src/pages/scara.html',
         welder: 'src/pages/welder.html',

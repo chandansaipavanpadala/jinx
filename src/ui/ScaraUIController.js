@@ -4,10 +4,15 @@
  * Uses the generalized N-DOF IK (DLS) solver.
  */
 import * as THREE from 'three';
-import { ik_dls, fk, jacobian, SCARA_DH_CONFIG } from '../math/KinematicsNDOF.js';
+import { ik_dls, fk, jacobian, SCARA_DH_CONFIG, getEllipsoid } from '../math/KinematicsNDOF.js';
 import PickAndPlaceStateMachine, { STATE, STATE_META } from '../logic/PickAndPlace.js';
 
 import CameraPanel from './CameraPanel.js';
+import { logger } from './ConsoleLogger.js';
+import MathDashboardPanel from './MathDashboardPanel.js';
+import AnalyzerPanel from './analyzer/AnalyzerPanel.js';
+import { SCARA_MODEL } from '../model/robots/ScaraModel.js';
+import { makePanelsModular } from './FloatingPanel.js';
 
 const $ = id => document.getElementById(id);
 const DEG = v => v * Math.PI / 180;
@@ -50,6 +55,10 @@ export default class ScaraUIController {
     this._cameraPanel = null;
     this._camRenderSkip = 0;
 
+    // ── Math Dashboard Panel ──
+    this._mathPanel = null;
+    this._analyzer = null;
+
     // BroadcastChannel for math dashboard sync
     this._frameCount = 0;
     this._mathChannel = new BroadcastChannel('jinx_math_sync');
@@ -60,7 +69,6 @@ export default class ScaraUIController {
       if (d.robot !== 'scara') return;
       if (d.type === 'fk' && d.q) {
         this.q = [...d.q];
-        // Sync hidden FK sliders
         $('fk-q1').value = RAD(d.q[0]).toFixed(0);
         $('fk-q2').value = RAD(d.q[1]).toFixed(0);
         $('fk-q3').value = (d.q[2] * 1000).toFixed(0);
@@ -70,9 +78,30 @@ export default class ScaraUIController {
         $('ik-xt').value = d.target[0];
         $('ik-yt').value = d.target[1];
         $('ik-zt').value = d.target[2];
+        this.setTab('ik');
         this._onIKSlider();
+      } else if (d.type === 'jog_joint' && d.joint !== undefined) {
+        this.q[d.joint] += d.delta;
+        this._cmdChannel.onmessage({ data: { robot: 'scara', type: 'fk', q: [...this.q] } });
+      } else if (d.type === 'jog_ee' && d.delta) {
+        $('ik-xt').value = (+$('ik-xt').value) + d.delta[0];
+        $('ik-yt').value = (+$('ik-yt').value) + d.delta[1];
+        $('ik-zt').value = (+$('ik-zt').value) + d.delta[2];
+        this.setTab('ik');
+        this._onIKSlider();
+      } else if (d.type === 'home') {
+        this._resetPose();
       }
     };
+
+    this._frameCount = 0;
+    this._camRenderSkip = 0;
+    
+    // View Toggles
+    this._wireframe = false;
+    this._frames = false;
+    this._ellipsoid = false;
+    this._cameraMode = 'orbit';
 
     // Link card DOM refs
     this._selectedLink = -1;
@@ -86,6 +115,8 @@ export default class ScaraUIController {
 
     this._bindEvents();
     this._bindLinkCard();
+    makePanelsModular($('cw'));
+    logger.log('SCARA UIController initialized.');
   }
 
   /* ═══════════ Event Wiring ═══════════ */
@@ -135,7 +166,100 @@ export default class ScaraUIController {
 
     // Math dashboard
     const mathBtn = $('btn-math-panel');
-    if (mathBtn) mathBtn.addEventListener('click', () => window.open('math-dashboard.html?robot=scara', '_blank'));
+    if (mathBtn) mathBtn.addEventListener('click', () => {
+      if (!this._mathPanel) {
+        this._mathPanel = new MathDashboardPanel({
+          mountRoot: document.getElementById('cw'),
+          robotType: 'scara'
+        });
+      }
+      this._mathPanel.toggle();
+      mathBtn.classList.toggle('active', this._mathPanel.isVisible);
+    });
+
+    const analyzerBtn = $('btn-analyzer');
+    if (analyzerBtn) analyzerBtn.addEventListener('click', () => {
+      if (!this._analyzer) {
+        this._analyzer = new AnalyzerPanel({
+          mountRoot: document.getElementById('cw'),
+          model: SCARA_MODEL,
+          getQ: () => [...this.q],
+          setQ: (q) => this._applyQFromAnalyzer(q),
+          onDhChange: (jointIdx, key, value, meshLinkIndex) => {
+            if (meshLinkIndex !== undefined && key === 'a') {
+              this.sm.resizeLink(meshLinkIndex, value);
+            }
+            this._updateScene(null);
+          },
+          onWorkspaceOverlay: (cells, visible) => {
+            this.sm.setWorkspaceOverlay(cells, visible);
+          },
+          onFramesToggle: (on) => {
+            this._frames = on;
+            this.sm.setAxesVisible(on);
+            $('btn-frames')?.classList.toggle('active', on);
+          },
+        });
+      }
+      this._analyzer.toggle();
+      analyzerBtn.classList.toggle('active', this._analyzer.isVisible);
+      if (this._analyzer.isVisible) this._analyzer.refreshModel();
+    });
+
+    // Toolbar Toggles
+    const wireBtn = $('btn-wireframe');
+    if (wireBtn) wireBtn.addEventListener('click', () => {
+      this._wireframe = !this._wireframe;
+      this.sm.setWireframe(this._wireframe);
+      wireBtn.classList.toggle('active', this._wireframe);
+    });
+
+    const frameBtn = $('btn-frames');
+    if (frameBtn) frameBtn.addEventListener('click', () => {
+      this._frames = !this._frames;
+      this.sm.setAxesVisible(this._frames);
+      frameBtn.classList.toggle('active', this._frames);
+    });
+
+    const ellBtn = $('btn-ellipsoid');
+    if (ellBtn) ellBtn.addEventListener('click', () => {
+      this._ellipsoid = !this._ellipsoid;
+      ellBtn.classList.toggle('active', this._ellipsoid);
+      this._updateScene(null);
+    });
+
+    const orbitBtn = $('btn-orbit');
+    const panBtn = $('btn-pan');
+    if (orbitBtn) orbitBtn.addEventListener('click', () => {
+      this._cameraMode = 'orbit';
+      this.sm.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+      orbitBtn.classList.add('active');
+      if (panBtn) panBtn.classList.remove('active');
+    });
+    if (panBtn) panBtn.addEventListener('click', () => {
+      this._cameraMode = 'pan';
+      this.sm.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+      panBtn.classList.add('active');
+      if (orbitBtn) orbitBtn.classList.remove('active');
+    });
+
+    // Hierarchy Clicks
+    document.querySelectorAll('#hierarchy [data-link]').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.link);
+        this._showLinkInspector(idx);
+      });
+    });
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', e => {
+      const k = e.key.toLowerCase();
+      if (k === ' ') { e.preventDefault(); this._toggleTask(); }
+      if (k === 'r') this._resetPose();
+      if (k === 'w') wireBtn?.click();
+      if (k === 'f') frameBtn?.click();
+      if (k === 'e') ellBtn?.click();
+    });
   }
 
   /* ═══════════ Tabs ═══════════ */
@@ -153,6 +277,7 @@ export default class ScaraUIController {
 
   /* ═══════════ Reset Pose ═══════════ */
   _resetPose() {
+    logger.info('Resetting SCARA to home pose.');
     // Stop any running task
     if (this._pnp.running) {
       this._pnp.stop();
@@ -185,6 +310,24 @@ export default class ScaraUIController {
     $('task-cycle').textContent = '0';
     $('task-progress').textContent = '—';
     $('taskBar').style.width = '0%';
+  }
+
+  /** Apply joint vector from RoboAnalyzer path playback */
+  _applyQFromAnalyzer(q) {
+    this.q = [...q];
+    const fk1 = $('fk-q1');
+    if (fk1) {
+      $('fk-q1').value = RAD(q[0]).toFixed(0);
+      $('fk-q2').value = RAD(q[1]).toFixed(0);
+      $('fk-q3').value = (q[2] * 1000).toFixed(0);
+      $('fk-q4').value = RAD(q[3]).toFixed(0);
+      $('fk-q1v').textContent = RAD(q[0]).toFixed(0);
+      $('fk-q2v').textContent = RAD(q[1]).toFixed(0);
+      $('fk-q3v').textContent = (q[2] * 1000).toFixed(0);
+      $('fk-q4v').textContent = RAD(q[3]).toFixed(0);
+    }
+    this._updateScene(null);
+    this._analyzer?.refreshModel();
   }
 
   /* ═══════════ FK Slider Handler ═══════════ */
@@ -241,6 +384,13 @@ export default class ScaraUIController {
     $('hStat').textContent = result.converged ? '✓ Valid' : '⚠ No Convergence';
     $('hStat').className = result.converged ? 'ok' : 'bad';
     $('hErr').textContent = result.error.toExponential(2) + ' m';
+    
+    if (!result.converged && this._lastStatus !== 'no_conv') {
+      logger.warn(`DLS IK failed to converge (err: ${result.error.toExponential(2)})`);
+      this._lastStatus = 'no_conv';
+    } else if (result.converged && this._lastStatus !== 'conv') {
+      this._lastStatus = 'conv';
+    }
 
     // Update FK sliders to reflect IK solution
     $('fk-q1').value = RAD(result.q[0]).toFixed(0);
@@ -319,9 +469,23 @@ export default class ScaraUIController {
     // HUD joint values
     $('h1').textContent = RAD(this.q[0]).toFixed(1) + '°';
     $('h2').textContent = RAD(this.q[1]).toFixed(1) + '°';
-    $('h3').textContent = (this.q[2] * 1000).toFixed(1) + ' mm';
+    $('h3').textContent = (this.q[2]).toFixed(2) + 'm';
     $('h4').textContent = RAD(this.q[3]).toFixed(1) + '°';
-    $('hHead').textContent = `(${pos[0].toFixed(3)}, ${pos[1].toFixed(3)}, ${pos[2].toFixed(3)}) m`;
+    $('hHead').textContent = `[${pos[0].toFixed(3)}, ${pos[1].toFixed(3)}, ${pos[2].toFixed(3)}]`;
+
+    // Status Bar Telemetry
+    const fpsEl = $('status-fps');
+    if (fpsEl) {
+      if (this._frameCount % 30 === 0) {
+        const now = performance.now();
+        if (this._lastTime) {
+          const dt = now - this._lastTime;
+          const fps = Math.round(1000 / (dt / 30));
+          fpsEl.textContent = fps;
+        }
+        this._lastTime = now;
+      }
+    }
 
     // EE readout cards
     $('ox').textContent = pos[0].toFixed(4) + ' m';
@@ -345,6 +509,30 @@ export default class ScaraUIController {
         this.sm.renderPerceptionView(this._cameraPanel.viewportCanvas);
       }
       this._cameraPanel.updateProjection(pos);
+    }
+
+    // Update tree badges
+    const b1 = $('tree-t1'), b2 = $('tree-t2'), b3 = $('tree-t3'), b4 = $('tree-t4');
+    if (b1) b1.textContent = RAD(this.q[0]).toFixed(1) + '°';
+    if (b2) b2.textContent = RAD(this.q[1]).toFixed(1) + '°';
+    if (b3) b3.textContent = (this.q[2] * 1000).toFixed(0) + 'mm';
+    if (b4) b4.textContent = RAD(this.q[3]).toFixed(1) + '°';
+
+    // Update Ellipsoid
+    if (this._ellipsoid) {
+      const { J, cols } = jacobian(this.q, SCARA_DH_CONFIG);
+      const ell = getEllipsoid(J, cols);
+      const rot = new THREE.Matrix4().fromArray([
+        ell.rotation[0], ell.rotation[3], ell.rotation[6], 0,
+        ell.rotation[1], ell.rotation[4], ell.rotation[7], 0,
+        ell.rotation[2], ell.rotation[5], ell.rotation[8], 0,
+        0, 0, 0, 1
+      ]);
+      // DH to Three coordinate swap for visualization
+      const pEll = new THREE.Vector3(pos[0], pos[2], -pos[1]);
+      this.sm.updateEllipsoid(true, ell.singularValues, rot, ell.mu, pEll);
+    } else {
+      this.sm.updateEllipsoid(false);
     }
 
     // ── Broadcast to Math Dashboard (throttled to every 2nd frame) ──
@@ -382,7 +570,10 @@ export default class ScaraUIController {
         error: ikResult?.error ?? 0,
         converged: ikResult?.converged ?? true,
         iterations: ikResult?.iterations ?? 0,
-        status: ikResult ? (ikResult.converged ? 'converged' : 'failed') : 'fk'
+        status: ikResult ? (ikResult.converged ? 'converged' : 'failed') : 'fk',
+        sdot: 0,
+        sddot: 0,
+        mode: this._tab,
       });
     }
   }
@@ -405,6 +596,7 @@ export default class ScaraUIController {
 
     if (this._pnp.running) {
       // Stop
+      logger.log('Pick & Place task stopped.');
       this._pnp.stop();
       cancelAnimationFrame(this._taskRAF);
       this._taskRAF = null;
@@ -417,6 +609,7 @@ export default class ScaraUIController {
       if (hint) hint.style.display = 'none';
     } else {
       // Start
+      logger.info(`Pick & Place task started (Mode: ${mode}).`);
       this.sm.resetTrail();
       this._pnp.setInitialQ([...this.q]);
 
@@ -571,8 +764,8 @@ export default class ScaraUIController {
       this.sm.transformControls.detach();
     }
 
-    // Legacy: drag target sphere for IK
-    if (this._raycaster.intersectObject(this.sm.targetSphere).length > 0) {
+    // Legacy: drag target sphere for IK (Require Shift to prioritize OrbitControls)
+    if (e.shiftKey && this._raycaster.intersectObject(this.sm.targetSphere).length > 0) {
       this._isDragging = true;
       this.sm.controls.enabled = false;
       document.body.style.cursor = 'grabbing';
@@ -705,6 +898,12 @@ export default class ScaraUIController {
       const newLen = parseFloat(this._linkSlider.value);
       this.sm.resizeLink(this._selectedLink, newLen);
       this._linkValue.textContent = newLen.toFixed(3) + ' m';
+      
+      clearTimeout(this._resizeLogTimer);
+      this._resizeLogTimer = setTimeout(() => {
+        logger.log(`Link ${this._selectedLink} resized to ${newLen.toFixed(3)} m`);
+      }, 500);
+
       // Re-run FK to update the 3D arm
       this._updateScene(null);
     });

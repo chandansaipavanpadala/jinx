@@ -9,11 +9,14 @@
  */
 
 import * as THREE from 'three';
-import { ik_dls, fk, jacobian, calcCartesianVelocity, WELDING_DH_CONFIG } from '../math/KinematicsNDOF.js';
+import { ik_dls, fk, jacobian, calcCartesianVelocity, WELDING_DH_CONFIG, getEllipsoid } from '../math/KinematicsNDOF.js';
 import { WeldingStateMachine } from '../logic/WeldingTask.js';
 import { WaypointTask } from '../logic/WaypointTask.js';
 
 import WaypointPanel from './WaypointPanel.js';
+import { logger } from './ConsoleLogger.js';
+import MathDashboardPanel from './MathDashboardPanel.js';
+import { makePanelsModular } from './FloatingPanel.js';
 
 const $ = id => document.getElementById(id);
 const RAD = Math.PI / 180;
@@ -31,6 +34,12 @@ export class WelderUIController {
     this.isWelding = false;
     this._taskRAF = null;
     this._lastTime = 0;
+
+    // View Toggles
+    this._wireframe = false;
+    this._frames = false;
+    this._ellipsoid = false;
+    this._cameraMode = 'orbit';
 
     // Hook state machine callbacks
     this.stateMachine.onTaskStateChange = (stateName) => {
@@ -108,6 +117,9 @@ export class WelderUIController {
     this._linkMax = $('linkCardMax');
     this._linkDefault = $('linkCardDefault');
 
+    // ── Math Dashboard Panel ──
+    this._mathPanel = null;
+
     // BroadcastChannel for math dashboard sync
     this._frameCount = 0;
     this._mathChannel = new BroadcastChannel('jinx_math_sync');
@@ -116,10 +128,9 @@ export class WelderUIController {
     this._cmdChannel.onmessage = (e) => {
       const d = e.data;
       if (d.robot !== 'welder') return;
-      if (this.isWelding) return; // Don't interfere during task
+      if (this.isWelding) return;
       if (d.type === 'fk' && d.q) {
         this.q = [...d.q];
-        // Sync hidden FK sliders
         for (let i = 0; i < 6; i++) {
           const sl = $(`t${i + 1}`);
           if (sl) sl.value = (d.q[i] * DEG).toFixed(0);
@@ -127,9 +138,29 @@ export class WelderUIController {
         this._updateScene();
         this._updateHUD();
       } else if (d.type === 'ik' && d.target) {
-        // Welder uses DLS IK
         const result = ik_dls(d.target, this.q, WELDING_DH_CONFIG, 200, 0.05);
         this.q = result.q;
+        this._syncSliders();
+        this._updateScene();
+        this._updateHUD();
+      } else if (d.type === 'jog_joint' && d.joint !== undefined) {
+        this.q[d.joint] += d.delta;
+        this._cmdChannel.onmessage({ data: { robot: 'welder', type: 'fk', q: [...this.q] } });
+      } else if (d.type === 'jog_ee' && d.delta) {
+        const { position } = fk(this.q, WELDING_DH_CONFIG);
+        const target = [
+          position[0] + d.delta[0],
+          position[1] + d.delta[1],
+          position[2] + d.delta[2],
+        ];
+        const result = ik_dls(target, this.q, WELDING_DH_CONFIG, 200, 0.05);
+        this.q = result.q;
+        this._syncSliders();
+        this._updateScene();
+        this._updateHUD();
+      } else if (d.type === 'home') {
+        this.q = [0, Math.PI / 4, -Math.PI / 4, 0, -Math.PI / 2, 0];
+        this._syncSliders();
         this._updateScene();
         this._updateHUD();
       }
@@ -141,6 +172,8 @@ export class WelderUIController {
     // Initial render
     this._updateScene();
     this._updateHUD();
+    makePanelsModular($('cw'));
+    logger.log('WelderUIController initialized.');
   }
 
   /* ═══════════ Event Binding ═══════════ */
@@ -175,12 +208,14 @@ export class WelderUIController {
       btnReset.addEventListener('click', () => {
         // Stop any running task
         if (this.isWelding) {
+          logger.log('Welding task stopped.');
           this.stateMachine.stop();
           this.isWelding = false;
           if (this._taskRAF) { cancelAnimationFrame(this._taskRAF); this._taskRAF = null; }
           const wb = $('btn-weld');
           if (wb) { wb.textContent = '▶ Start Welding'; wb.classList.remove('stop'); }
         }
+        logger.info('Resetting Welder to home pose.');
         this.sm.resetTrail();
         this.q = [0, Math.PI / 4, -Math.PI / 4, 0, -Math.PI / 2, 0];
         this._updateScene();
@@ -207,8 +242,72 @@ export class WelderUIController {
 
     // Math dashboard
     const mathBtn = $('btn-math-panel');
-    if (mathBtn) mathBtn.addEventListener('click', () => window.open('math-dashboard.html?robot=welder', '_blank'));
+    if (mathBtn) mathBtn.addEventListener('click', () => {
+      if (!this._mathPanel) {
+        this._mathPanel = new MathDashboardPanel({
+          mountRoot: document.getElementById('cw'),
+          robotType: 'welder'
+        });
+      }
+      this._mathPanel.toggle();
+      mathBtn.classList.toggle('active', this._mathPanel.isVisible);
+    });
 
+    // Toolbar Toggles
+    const wireBtn = $('btn-wireframe');
+    if (wireBtn) wireBtn.addEventListener('click', () => {
+      this._wireframe = !this._wireframe;
+      this.sm.setWireframe(this._wireframe);
+      wireBtn.classList.toggle('active', this._wireframe);
+    });
+
+    const frameBtn = $('btn-frames');
+    if (frameBtn) frameBtn.addEventListener('click', () => {
+      this._frames = !this._frames;
+      this.sm.setAxesVisible(this._frames);
+      frameBtn.classList.toggle('active', this._frames);
+    });
+
+    const ellBtn = $('btn-ellipsoid');
+    if (ellBtn) ellBtn.addEventListener('click', () => {
+      this._ellipsoid = !this._ellipsoid;
+      ellBtn.classList.toggle('active', this._ellipsoid);
+      this._updateHUD();
+    });
+
+    const orbitBtn = $('btn-orbit');
+    const panBtn = $('btn-pan');
+    if (orbitBtn) orbitBtn.addEventListener('click', () => {
+      this._cameraMode = 'orbit';
+      this.sm.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+      orbitBtn.classList.add('active');
+      if (panBtn) panBtn.classList.remove('active');
+    });
+    if (panBtn) panBtn.addEventListener('click', () => {
+      this._cameraMode = 'pan';
+      this.sm.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+      panBtn.classList.add('active');
+      if (orbitBtn) orbitBtn.classList.remove('active');
+    });
+
+    // Hierarchy Clicks
+    document.querySelectorAll('#hierarchy [data-link]').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.link);
+        this._showLinkInspector(idx);
+      });
+    });
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', e => {
+      const k = e.key.toLowerCase();
+      if (k === ' ') { e.preventDefault(); this._toggleTask(); }
+      if (k === 'r') this._resetPose();
+      if (k === 'w') wireBtn?.click();
+      if (k === 'f') frameBtn?.click();
+      if (k === 'e') ellBtn?.click();
+    });
+  
     // Raycaster — link click detection
     const dom = this.sm.renderer.domElement;
     dom.addEventListener('pointerdown', e => this._onPointerDown(e));
@@ -220,6 +319,7 @@ export class WelderUIController {
 
     if (this.isWelding) {
       // ── Stop ──
+      logger.log('Welding task stopped.');
       this.stateMachine.stop();
       this.isWelding = false;
       if (this._taskRAF) { cancelAnimationFrame(this._taskRAF); this._taskRAF = null; }
@@ -227,6 +327,7 @@ export class WelderUIController {
       this.sm.setSparkActive(false);
     } else {
       // ── Start ──
+      logger.info('Welding task started.');
       this.sm.resetTrail();
       this.stateMachine.start();
       this.isWelding = true;
@@ -268,8 +369,14 @@ export class WelderUIController {
       const progEl = $('val-task-prog');
       if (progEl) progEl.innerText = '100%';
       this._updateHUD(); // reset HUD status to READY
+      
+      if (this._lastTaskState !== 'completed') {
+        logger.info('Welding task completed successfully.');
+        this._lastTaskState = 'completed';
+      }
       return;
     }
+    this._lastTaskState = 'running';
 
     // ── 1. Get current FK position (for state machine first-frame init) ──
     const { position: currentPos } = fk(this.q, WELDING_DH_CONFIG);
@@ -329,6 +436,58 @@ export class WelderUIController {
     if (vy) vy.innerText = position[1].toFixed(3);
     if (vz) vz.innerText = position[2].toFixed(3);
 
+    // Update tree badges
+    for (let i = 0; i < 6; i++) {
+      const badge = $(`tree-t${i + 1}`);
+      if (badge) badge.textContent = (this.q[i] * DEG).toFixed(1) + '°';
+    }
+
+    // Update Professional HUD Groups (J1-J3, J4-J6)
+    const h123 = $('hud-q123');
+    if (h123) {
+      const v1 = (this.q[0] * DEG).toFixed(1);
+      const v2 = (this.q[1] * DEG).toFixed(1);
+      const v3 = (this.q[2] * DEG).toFixed(1);
+      h123.textContent = `${v1}, ${v2}, ${v3}`;
+    }
+    const h456 = $('hud-q456');
+    if (h456) {
+      const v4 = (this.q[3] * DEG).toFixed(1);
+      const v5 = (this.q[4] * DEG).toFixed(1);
+      const v6 = (this.q[5] * DEG).toFixed(1);
+      h456.textContent = `${v4}, ${v5}, ${v6}`;
+    }
+
+    // Update Status Bar Telemetry
+    const fpsEl = $('status-fps');
+    if (fpsEl && this._frameCount % 30 === 0) {
+      // Basic FPS estimate from delta
+      const now = performance.now();
+      if (this._lastTime) {
+        const dt = now - this._lastTime;
+        const fps = Math.round(1000 / dt);
+        fpsEl.textContent = fps;
+      }
+      this._lastTime = now;
+    }
+
+    // Update Ellipsoid
+    if (this._ellipsoid) {
+      const { J, cols } = jacobian(this.q, WELDING_DH_CONFIG);
+      const ell = getEllipsoid(J, cols);
+      const rot = new THREE.Matrix4().fromArray([
+        ell.rotation[0], ell.rotation[3], ell.rotation[6], 0,
+        ell.rotation[1], ell.rotation[4], ell.rotation[7], 0,
+        ell.rotation[2], ell.rotation[5], ell.rotation[8], 0,
+        0, 0, 0, 1
+      ]);
+      // DH to Three coordinate swap for visualization
+      const pEll = new THREE.Vector3(position[0], position[2], -position[1]);
+      this.sm.updateEllipsoid(true, ell.singularValues, rot, ell.mu, pEll);
+    } else {
+      this.sm.updateEllipsoid(false);
+    }
+
     // HUD EE readout
     const hHead = $('hHead');
     if (hHead) hHead.innerText = `(${position[0].toFixed(3)}, ${position[1].toFixed(3)}, ${position[2].toFixed(3)})`;
@@ -380,7 +539,10 @@ export class WelderUIController {
         reach: Math.sqrt(position[0] ** 2 + position[1] ** 2 + position[2] ** 2),
         error: 0,
         converged: true,
-        status: this.isWelding ? 'welding' : 'ready'
+        status: this.isWelding ? 'welding' : 'ready',
+        sdot: 0,
+        sddot: 0,
+        mode: this.isWelding ? 'welding' : 'fk',
       });
     }
   }
@@ -504,8 +666,18 @@ export class WelderUIController {
     if (eDet) eDet.innerText = d.toExponential(3);
     if (eMu) eMu.innerText = mu.toExponential(3);
     if (warn) {
-      if (mu < 0.001) warn.classList.add('on');
-      else warn.classList.remove('on');
+      if (mu < 0.001) {
+        warn.classList.add('on');
+        if (this._lastSingularity !== true) {
+          logger.warn(`Approaching singularity (μ = ${mu.toExponential(2)})`);
+          this._lastSingularity = true;
+        }
+      } else {
+        warn.classList.remove('on');
+        if (this._lastSingularity === true) {
+          this._lastSingularity = false;
+        }
+      }
     }
   }
 
@@ -622,6 +794,12 @@ export class WelderUIController {
       const newLen = parseFloat(this._linkSlider.value);
       this.sm.resizeLink(this._selectedLink, newLen);
       this._linkValue.textContent = newLen.toFixed(3) + ' m';
+      
+      clearTimeout(this._resizeLogTimer);
+      this._resizeLogTimer = setTimeout(() => {
+        logger.log(`Link ${this._selectedLink} resized to ${newLen.toFixed(3)} m`);
+      }, 500);
+
       // Re-run FK to update the 3D arm
       this._updateScene();
       this._updateHUD();

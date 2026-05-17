@@ -28,10 +28,10 @@ export class WelderSceneManager {
   constructor(containerId) {
     const wrap = document.getElementById(containerId);
 
-    // ── Scene — dark, smoky welding booth atmosphere ──
+    // ── Scene ──
     this._scene = new THREE.Scene();
-    this._scene.background = new THREE.Color(0x06060c);
-    this._scene.fog = new THREE.FogExp2(0x06060c, 0.12);
+    this._scene.background = new THREE.Color(0x1a1a1c);
+    this._scene.fog = new THREE.Fog(0x1a1a1c, 3.5, 7.0);
 
     // ── Camera ──
     this._camera = new THREE.PerspectiveCamera(50, wrap.clientWidth / wrap.clientHeight, 0.01, 10);
@@ -79,12 +79,14 @@ export class WelderSceneManager {
 
     // ── Resize ──
     this._wrap = wrap;
-    window.addEventListener('resize', () => {
+    const resizeObserver = new ResizeObserver(() => {
       const w = this._wrap.clientWidth, h = this._wrap.clientHeight;
+      if (w === 0 || h === 0) return;
       this._camera.aspect = w / h;
       this._camera.updateProjectionMatrix();
       this._renderer.setSize(w, h);
     });
+    resizeObserver.observe(this._wrap);
   }
 
   /* ════════════════════════════════════════════════════════
@@ -94,56 +96,48 @@ export class WelderSceneManager {
   _initLighting() {
     const s = this._scene;
 
-    // Very dim ambient — booth feels dark until spark ignites
-    s.add(new THREE.AmbientLight(0x304060, 1.0));
+    // Subtle white ambient fill
+    this._lAmb = new THREE.AmbientLight(0xffffff, 0.4);
+    s.add(this._lAmb);
 
-    // Single overhead — dim blue-white, casts shadows
-    const sun = new THREE.DirectionalLight(0xb0c0e0, 1.2);
-    sun.position.set(0.5, 4.0, 0.5);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.bias = -0.0003;
-    sun.shadow.camera.near = 0.1;
-    sun.shadow.camera.far = 12;
-    sun.shadow.camera.top = sun.shadow.camera.right = 2.5;
-    sun.shadow.camera.bottom = sun.shadow.camera.left = -2.5;
-    s.add(sun);
+    // Primary studio light (key light)
+    this._lMain = new THREE.DirectionalLight(0xffffff, 1.2);
+    this._lMain.position.set(2, 4, 3);
+    this._lMain.castShadow = true;
+    this._lMain.shadow.camera.left = -2;
+    this._lMain.shadow.camera.right = 2;
+    this._lMain.shadow.camera.top = 2;
+    this._lMain.shadow.camera.bottom = -2;
+    this._lMain.shadow.mapSize.set(1024, 1024);
+    this._lMain.shadow.bias = -0.0005;
+    s.add(this._lMain);
 
-    // Cool rim from behind — silhouette the robot
-    const rim = new THREE.DirectionalLight(0x304080, 0.55);
-    rim.position.set(-1, 1.5, -2);
+    // Soft hemisphere light (sky/ground fill)
+    this._lHemi = new THREE.HemisphereLight(0xe8f0ff, 0x444444, 0.8);
+    s.add(this._lHemi);
+
+    // Rim light (for definition)
+    const rim = new THREE.DirectionalLight(0xffffff, 0.4);
+    rim.position.set(-2, 1, -2);
     s.add(rim);
-
-    // Faint warm ground bounce
-    const bounce = new THREE.DirectionalLight(0x503020, 0.30);
-    bounce.position.set(0, -0.5, 0);
-    s.add(bounce);
   }
 
   /* ════════════════════════════════════════════════════════
      PBR Materials
      ════════════════════════════════════════════════════════ */
   _initMaterials() {
-    this._mBase = new THREE.MeshPhysicalMaterial({
-      color: 0x1a1a2e, roughness: 0.25, metalness: 0.85,
-      clearcoat: 0.8, clearcoatRoughness: 0.1, envMapIntensity: 1.5
-    });
-    this._mArm = new THREE.MeshPhysicalMaterial({
-      color: 0xe8e8e8, roughness: 0.12, metalness: 0.6,
-      clearcoat: 1.0, clearcoatRoughness: 0.05, envMapIntensity: 1.2
-    });
-    this._mJoint = new THREE.MeshPhysicalMaterial({
-      color: 0xC8A200, roughness: 0.05, metalness: 0.95,
-      clearcoat: 1.0, envMapIntensity: 2.0
-    });
-    this._mEE = new THREE.MeshPhysicalMaterial({
-      color: 0xCC2222, roughness: 0.15, metalness: 0.5,
-      clearcoat: 1.0, clearcoatRoughness: 0.05, envMapIntensity: 1.4
-    });
+    this._mBase = new THREE.MeshStandardMaterial({ color: 0x4a4a4e, roughness: 0.75, metalness: 0.35 });
+    this._mArm = new THREE.MeshStandardMaterial({ color: 0x4a4a4e, roughness: 0.75, metalness: 0.35 });
+    this._mJoint = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.65, metalness: 0.45 });
+    this._mEE = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5, metalness: 0.8 });
+    this._mGlow = new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 2 });
+    
     this._mTgt = new THREE.MeshPhysicalMaterial({
       color: 0x00e5ff, emissive: 0x0088ff, emissiveIntensity: 1.0,
       roughness: 0.1, metalness: 0.8, clearcoat: 1.0
     });
+    this._mTrail = new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.6, depthWrite: false });
+    this._mBeam = new THREE.LineDashedMaterial({ color: 0x00e5ff, dashSize: 0.02, gapSize: 0.01 });
   }
 
   /* ════════════════════════════════════════════════════════
@@ -155,10 +149,9 @@ export class WelderSceneManager {
   _initEnvironment() {
     const s = this._scene;
 
-    // ── 1. Heavy concrete floor with diamond-plate look ──
-    const floorMat = new THREE.MeshPhysicalMaterial({
-      color: 0x14161c, roughness: 0.82, metalness: 0.20,
-      clearcoat: 0.15, clearcoatRoughness: 0.7,
+    // ── 1. Polished concrete factory floor ──
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1a1c, roughness: 0.8,
     });
     const floorG = new THREE.PlaneGeometry(8, 8);
     floorG.rotateX(-Math.PI / 2);
@@ -167,10 +160,17 @@ export class WelderSceneManager {
     floor.receiveShadow = true;
     s.add(floor);
 
-    // Floor grid — very subtle, dark industrial
-    const floorGrid = new THREE.GridHelper(6, 48, 0x161a24, 0x101418);
-    floorGrid.position.y = -0.756;
-    s.add(floorGrid);
+    // Dual-layer Engineering Grid (Phase 4A)
+    const majorGrid = new THREE.GridHelper(8, 16, 0x404048, 0x28282c);
+    majorGrid.position.y = -0.758;
+    majorGrid.name = "majorGrid";
+    s.add(majorGrid);
+
+    const minorGrid = new THREE.GridHelper(8, 80, 0x222228, 0x222228);
+    minorGrid.position.y = -0.759;
+    minorGrid.material.opacity = 0.5;
+    minorGrid.material.transparent = true;
+    s.add(minorGrid);
 
     // ── 2. Hazard floor markings (yellow/black safety stripes) ──
     const hazardMat = new THREE.MeshStandardMaterial({
@@ -435,19 +435,32 @@ export class WelderSceneManager {
     this._sparkLight.visible = false;
     s.add(this._sparkLight);
 
-    // ── Clickable Link Mesh Registry ──
-    // dhIndex = which row in WELDING_DH_CONFIG;  dhKey = 'a' or 'd'
     this._linkMeshes = [
-      { mesh: this._links[0], dhIndex: 0, dhKey: 'd', label: 'Base Column (d₁)',
-        defaultLen: BASE_H, min: 0.10, max: 0.50 },
-      { mesh: this._links[1], dhIndex: 1, dhKey: 'a', label: 'Upper Arm (a₂)',
-        defaultLen: L_UPPER, min: 0.15, max: 0.60 },
-      { mesh: this._links[2], dhIndex: 2, dhKey: 'a', label: 'Forearm (a₃)',
-        defaultLen: L_FORE, min: 0.10, max: 0.50 },
+      { mesh: this._links[0], dhIndex: 0, dhKey: 'd', label: 'Link 1 (Base)',   defaultLen: BASE_H, min: 0.10, max: 0.50 },
+      { mesh: this._links[1], dhIndex: 1, dhKey: 'a', label: 'Link 2 (Shoulder)', defaultLen: L_UPPER, min: 0.15, max: 0.60 },
+      { mesh: this._links[2], dhIndex: 2, dhKey: 'a', label: 'Link 3 (Elbow)',    defaultLen: L_FORE, min: 0.10, max: 0.50 },
     ];
     this._highlightedLink = -1;
-    this._savedEmissive = null;
-    this._savedEmissiveIntensity = 0;
+
+    // Coordinate Frames (Phase 4A)
+    this._axesHelpers = [];
+    this._joints.forEach((joint, i) => {
+      const axes = new THREE.AxesHelper(0.12);
+      axes.visible = false;
+      joint.add(axes);
+      this._axesHelpers.push(axes);
+    });
+
+    // Manipulability Ellipsoid (Phase 4.2)
+    this._ellipsoid = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 32, 24),
+      new THREE.MeshStandardMaterial({
+        color: 0x00ff80, transparent: true, opacity: 0.35,
+        depthWrite: false, side: THREE.DoubleSide
+      })
+    );
+    this._ellipsoid.visible = false;
+    s.add(this._ellipsoid);
   }
 
   /* ════════════════════════════════════════════════════════
@@ -718,5 +731,38 @@ export class WelderSceneManager {
       mat.emissiveIntensity = this._savedEmissiveIntensity || 0;
     }
     this._highlightedLink = -1;
+  }
+
+  /** Toggle wireframe on all robot meshes */
+  setWireframe(active) {
+    this._scene.traverse(o => {
+      if (o.isMesh && (o.material.color || o.material.emissive)) {
+        if (o.name === "majorGrid" || o.type === "GridHelper") return;
+        o.material.wireframe = active;
+      }
+    });
+  }
+
+  /** Toggle coordinate frames visibility */
+  setAxesVisible(active) {
+    this._axesHelpers.forEach(ax => ax.visible = active);
+  }
+
+  /**
+   * Update the Manipulability Ellipsoid at the End Effector.
+   */
+  updateEllipsoid(visible, singularValues, rotation, mu, pos) {
+    if (!this._ellipsoid) return;
+    this._ellipsoid.visible = visible;
+    if (!visible) return;
+
+    this._ellipsoid.position.copy(pos);
+    const s = singularValues.map(v => Math.max(v * 0.25, 0.001));
+    this._ellipsoid.scale.set(s[0], s[1], s[2]);
+    if (rotation) this._ellipsoid.setRotationFromMatrix(rotation);
+    
+    // Green (High Mu) -> Red (Singular)
+    const normMu = Math.min(mu * 50.0, 1.0);
+    this._ellipsoid.material.color.setHSL(0.35 * normMu, 1.0, 0.5);
   }
 }

@@ -109,15 +109,70 @@ export function jacMat(t1, t2, t3) {
 }
 
 /**
- * 3×3 Matrix determinant
- * 
- * Used for manipulability index μ = |det(J)|
- *
- * @param {number[][]} m - 3×3 matrix
- * @returns {number} Determinant
+ * 3x3 Determinant
  */
 export function det3(m) {
-  return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-    - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-    + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+  return m[0][0]*(m[1][1]*m[2][2] - m[1][2]*m[2][1]) -
+         m[0][1]*(m[1][0]*m[2][2] - m[1][2]*m[2][0]) +
+         m[0][2]*(m[1][0]*m[2][1] - m[1][1]*m[2][0]);
+}
+
+/**
+ * Computes singular values and orientation for the manipulability ellipsoid.
+ * Based on J*J^T.
+ * @param {number[][]} J - 3x3 Jacobian
+ * @returns {{ singularValues: number[], rotation: THREE.Matrix4 }}
+ */
+export function getEllipsoid(J) {
+  const A = [[0,0,0],[0,0,0],[0,0,0]];
+  for(let i=0; i<3; i++) {
+    for(let j=0; j<3; j++) {
+      for(let k=0; k<3; k++) A[i][j] += J[i][k] * J[j][k];
+    }
+  }
+
+  let V = [[1,0,0],[0,1,0],[0,0,1]];
+  let D = [A[0][0], A[1][1], A[2][2]];
+  let B = [A[0][0], A[1][1], A[2][2]];
+  let Z = [0,0,0];
+
+  for (let iter = 0; iter < 50; iter++) {
+    let sm = Math.abs(A[0][1]) + Math.abs(A[0][2]) + Math.abs(A[1][2]);
+    if (sm === 0) break;
+
+    for (let i = 0; i < 2; i++) {
+      for (let j = i + 1; j < 3; j++) {
+        let g = 100.0 * Math.abs(A[i][j]);
+        if (iter > 4 && (Math.abs(D[i]) + g === Math.abs(D[i])) && (Math.abs(D[j]) + g === Math.abs(D[j]))) {
+          A[i][j] = 0.0;
+        } else if (Math.abs(A[i][j]) > 0.0) {
+          let h = D[j] - D[i], t;
+          if (Math.abs(h) + g === Math.abs(h)) t = A[i][j] / h;
+          else {
+            let theta = 0.5 * h / A[i][j];
+            t = 1.0 / (Math.abs(theta) + Math.sqrt(1.0 + theta * theta));
+            if (theta < 0) t = -t;
+          }
+          let c = 1.0 / Math.sqrt(1 + t * t), s = t * c, tau = s / (1.0 + c), hh = t * A[i][j];
+          Z[i] -= hh; Z[j] += hh; D[i] -= hh; D[j] += hh;
+          A[i][j] = 0;
+          for (let k = 0; k <= i - 1; k++) { g = A[k][i]; h = A[k][j]; A[k][i] = g - s * (h + g * tau); A[k][j] = h + s * (g - h * tau); }
+          for (let k = i + 1; k <= j - 1; k++) { g = A[i][k]; h = A[k][j]; A[i][k] = g - s * (h + g * tau); A[k][j] = h + s * (g - h * tau); }
+          for (let k = j + 1; k < 3; k++) { g = A[i][k]; h = A[j][k]; A[i][k] = g - s * (h + g * tau); A[j][k] = h + s * (g - h * tau); }
+          for (let k = 0; k < 3; k++) { g = V[k][i]; h = V[k][j]; V[k][i] = g - s * (h + g * tau); V[k][j] = h + s * (g - h * tau); }
+        }
+      }
+    }
+    for (let i = 0; i < 3; i++) { B[i] += Z[i]; D[i] = B[i]; Z[i] = 0; }
+  }
+
+  const sv = D.map(v => Math.sqrt(Math.max(v, 0)));
+  const rot = new THREE.Matrix4().set(
+    V[0][0], V[0][1], V[0][2], 0,
+    V[1][0], V[1][1], V[1][2], 0,
+    V[2][0], V[2][1], V[2][2], 0,
+    0, 0, 0, 1
+  );
+
+  return { singularValues: sv, rotation: rot };
 }

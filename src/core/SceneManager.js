@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { fkMat, V3, L1, L2, L3, RAD, linkLengths } from '../math/Kinematics.js';
+import { fkMat, V3, L1, L2, L3, RAD, linkLengths, clamp } from '../math/Kinematics.js';
 
 const TRAIL_N = 60;
 
@@ -26,8 +26,8 @@ export default class SceneManager {
 
     /* ── Scene ── */
     this._scene = new THREE.Scene();
-    this._scene.background = new THREE.Color(0x070710);
-    this._scene.fog = new THREE.Fog(0x070710, 2.5, 5.0);
+    this._scene.background = new THREE.Color(0x17181c);
+    this._scene.fog = new THREE.Fog(0x17181c, 2.5, 6.0);
 
     /* ── Main Camera ── */
     this._camera = new THREE.PerspectiveCamera(
@@ -96,17 +96,22 @@ export default class SceneManager {
     /* ── Target, glow rings, beam, trail ── */
     this._initTargetAndTrail();
 
+    /* ── Shadow-avoidance demo (hand + workspace patch) ── */
+    this._initShadowDemo();
+
     /* ── Drag plane for raycaster (table surface y=0.025) ── */
     this._dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.025);
 
     /* ── Resize handler ── */
     this._wrap = wrap;
-    window.addEventListener('resize', () => {
+    const resizeObserver = new ResizeObserver(() => {
       const w = this._wrap.clientWidth, h = this._wrap.clientHeight;
+      if (w === 0 || h === 0) return;
       this._camera.aspect = w / h;
       this._camera.updateProjectionMatrix();
       this._renderer.setSize(w, h);
     });
+    resizeObserver.observe(this._wrap);
   }
 
   /* ════════════════════════════════════════════════════════
@@ -114,29 +119,27 @@ export default class SceneManager {
      ════════════════════════════════════════════════════════ */
   _initLighting() {
     const s = this._scene;
-    // 1. Soft ambient
-    s.add(new THREE.AmbientLight(0x6070c0, 0.90));
-    // 2. Main directional (sun)
-    const sun = new THREE.DirectionalLight(0xffffff, 1.20);
-    sun.position.set(2.0, 3.5, 1.8);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.bias = -0.0004;
-    sun.shadow.camera.near = 0.1;
-    sun.shadow.camera.far = 10;
-    sun.shadow.camera.top = sun.shadow.camera.right = 2;
-    sun.shadow.camera.bottom = sun.shadow.camera.left = -2;
-    s.add(sun);
-    // 3. Warm fill
-    const fill = new THREE.DirectionalLight(0xffa060, 0.55);
-    fill.position.set(-2, 1.5, -0.5);
-    s.add(fill);
-    // 4. Cool rim
-    const rim = new THREE.DirectionalLight(0x4080ff, 0.35);
-    rim.position.set(-0.5, 0.5, -2);
-    s.add(rim);
-    // 5. Lamp head spot
-    this._spot = new THREE.SpotLight(0xFFF8D0, 3.5);
+    
+    // Main directional light (studio lighting)
+    this._dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    this._dirLight.position.set(2, 4, 2);
+    this._dirLight.castShadow = true;
+    this._dirLight.shadow.mapSize.set(2048, 2048);
+    this._dirLight.shadow.bias = -0.0004;
+    this._dirLight.shadow.camera.near = 0.1;
+    this._dirLight.shadow.camera.far = 10;
+    this._dirLight.shadow.camera.top = this._dirLight.shadow.camera.right = 2;
+    this._dirLight.shadow.camera.bottom = this._dirLight.shadow.camera.left = -2;
+    s.add(this._dirLight);
+
+    this._ambient = new THREE.AmbientLight(0x9090a0, 0.4);
+    s.add(this._ambient);
+
+    this._hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.3);
+    s.add(this._hemi);
+
+    // Retain lamp head spot (it's a shadow lamp simulator after all)
+    this._spot = new THREE.SpotLight(0xFFFFFF, 2.0);
     this._spot.angle = 0.40;
     this._spot.penumbra = 0.40;
     this._spot.decay = 1.4;
@@ -148,8 +151,9 @@ export default class SceneManager {
     this._spotTgt = new THREE.Object3D();
     s.add(this._spotTgt);
     this._spot.target = this._spotTgt;
-    // 6. Point light near head
-    this._lPt = new THREE.PointLight(0xFFE890, 1.5, 1.2);
+
+    // Small point light near head to illuminate shade interior
+    this._lPt = new THREE.PointLight(0xFFFFFF, 0.5, 1.2);
     s.add(this._lPt);
   }
 
@@ -157,34 +161,39 @@ export default class SceneManager {
      Materials
      ════════════════════════════════════════════════════════ */
   _initMaterials() {
-    this._mBody = new THREE.MeshPhysicalMaterial({
-      color: 0x8C0A0A, roughness: 0.15, metalness: 0.4,
-      clearcoat: 1.0, clearcoatRoughness: 0.05, envMapIntensity: 1.2
+    // Professional Engineering Gray for main body
+    this._mBody = new THREE.MeshStandardMaterial({
+      color: 0x4a4a4e,      // neutral industrial gray
+      roughness: 0.8,
+      metalness: 0.2,
     });
-    this._mJoint = new THREE.MeshPhysicalMaterial({
-      color: 0xC8A200, roughness: 0.05, metalness: 0.95,
-      clearcoat: 1.0, envMapIntensity: 2.0
-    });
-    this._mShOut = new THREE.MeshStandardMaterial({
-      color: 0x202028, roughness: 0.5, metalness: 0.1, side: THREE.FrontSide
+    // Darker tone for joints to provide contrast
+    this._mJoint = new THREE.MeshStandardMaterial({
+      color: 0x2d2d30,
+      roughness: 0.7,
+      metalness: 0.3,
     });
     this._mShIn = new THREE.MeshStandardMaterial({
-      color: 0xF8F0A0, roughness: 0.6, emissive: 0x604820,
-      emissiveIntensity: 0.5, side: THREE.BackSide
+      color: 0xE0E0E0, roughness: 0.6, emissive: 0x111111,
+      emissiveIntensity: 0.1, side: THREE.BackSide
+    });
+    // High-visibility selection material (Engineering blue)
+    this._mHighlightMat = new THREE.MeshStandardMaterial({
+      color: 0x3a96dd, roughness: 0.6, emissive: 0x3a96dd,
+      emissiveIntensity: 0.1
     });
     this._mCone = new THREE.MeshBasicMaterial({
-      color: 0xFFF870, transparent: true, opacity: 0.05,
+      color: 0xFFF870, transparent: true, opacity: 0.03,
       side: THREE.DoubleSide, depthWrite: false
     });
     this._mBeam = new THREE.LineDashedMaterial({
       color: 0xE8C020, dashSize: 0.02, gapSize: 0.01
     });
-    this._mTgt = new THREE.MeshPhysicalMaterial({
-      color: 0x00e5ff, emissive: 0x0088ff, emissiveIntensity: 1.0,
-      roughness: 0.1, metalness: 0.8, clearcoat: 1.0
+    this._mTgt = new THREE.MeshStandardMaterial({
+      color: 0x3a96dd, roughness: 0.3, metalness: 0.8
     });
-    this._mTrail = new THREE.MeshBasicMaterial({
-      color: 0x00e5ff, transparent: true, opacity: 0.6, depthWrite: false
+    this._mTrail = new THREE.LineBasicMaterial({
+      color: 0x3a96dd, transparent: true, opacity: 0.8, depthWrite: false
     });
   }
 
@@ -194,19 +203,33 @@ export default class SceneManager {
   _initEnvironment() {
     const s = this._scene;
 
-    // Floor
-    const floorG = new THREE.PlaneGeometry(5, 5);
+    // Matte Floor
+    const floorG = new THREE.PlaneGeometry(10, 10);
     floorG.rotateX(-Math.PI / 2);
     const floor = new THREE.Mesh(floorG, new THREE.MeshStandardMaterial({
-      color: 0x0b0b18, roughness: 0.98
+      color: 0x181818, roughness: 1.0
     }));
     floor.position.y = -0.76;
     floor.receiveShadow = true;
     s.add(floor);
 
-    const floorGrid = new THREE.GridHelper(4, 32, 0x18182a, 0x10101e);
-    floorGrid.position.y = -0.756;
-    s.add(floorGrid);
+    // Custom Engineering Grid (Minor and Major lines)
+    const minorGrid = new THREE.GridHelper(10, 100, 0x222222, 0x1a1a1c);
+    minorGrid.position.y = -0.756;
+    minorGrid.material.transparent = true;
+    minorGrid.material.opacity = 0.18;
+    s.add(minorGrid);
+    
+    const majorGrid = new THREE.GridHelper(10, 20, 0x444444, 0x333333);
+    majorGrid.position.y = -0.755;
+    majorGrid.material.transparent = true;
+    majorGrid.material.opacity = 0.18;
+    majorGrid.name = "majorGrid";
+    s.add(majorGrid);
+
+    // World Origin Axes (0.3m scale)
+    const axesHelper = new THREE.AxesHelper(0.3);
+    s.add(axesHelper);
 
     // Table top
     const tblTopMat = new THREE.MeshStandardMaterial({
@@ -324,6 +347,15 @@ export default class SceneManager {
     this._mWrist.castShadow = true;
     lamp.add(this._mWrist);
 
+    // Offset Brackets
+    this._mBrak1 = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.06, 16), mj);
+    this._mBrak1.castShadow = true;
+    lamp.add(this._mBrak1);
+
+    this._mBrak2 = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.06, 16), mj);
+    this._mBrak2.castShadow = true;
+    lamp.add(this._mBrak2);
+
     // Shade outer + inner
     this._mSO = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.048, 0.062, 24), this._mShOut);
     this._mSO.castShadow = true;
@@ -348,15 +380,22 @@ export default class SceneManager {
     this._mLC.renderOrder = 1;
     lamp.add(this._mLC);
 
-    // ── Clickable Link Mesh Registry ──
-    // Each entry: { mesh, key, label, radius, defaultLen, min, max }
-    this._linkMeshes = [
-      { mesh: this._mCol, key: 'L1', label: 'Base Column (d₁)',  radius: [0.022, 0.026], defaultLen: L1, min: 0.05, max: 0.35 },
-      { mesh: this._mLow, key: 'L2', label: 'Lower Arm (a₂)',    radius: [0.022, 0.022], defaultLen: L2, min: 0.10, max: 0.50 },
-      { mesh: this._mUp,  key: 'L3', label: 'Upper Arm (a₃)',    radius: [0.018, 0.018], defaultLen: L3, min: 0.08, max: 0.45 },
+    // Standardized metadata for UI interaction
+    this.linkMeshes = [
+      { mesh: this._mCol, key: 'L1', label: 'Link 1 (Column)', radius: [0.022, 0.026], defaultLen: L1, min: 0.05, max: 0.40 },
+      { mesh: this._mLow, key: 'L2', label: 'Link 2 (Lower Arm)', radius: [0.022, 0.022], defaultLen: L2, min: 0.10, max: 0.60 },
+      { mesh: this._mUp,  key: 'L3', label: 'Link 3 (Upper Arm)', radius: [0.018, 0.018], defaultLen: L3, min: 0.08, max: 0.50 },
     ];
-    this._highlightedLink = -1;
-    this._savedEmissive = null;
+    this.linkMeshArray = this.linkMeshes.map(l => l.mesh);
+
+    // Coordinate Frames (Init invisible)
+    this._axesHelpers = [];
+    [this._mSh, this._mEl, this._mWrist].forEach(parent => {
+      const axes = new THREE.AxesHelper(0.12);
+      axes.visible = false;
+      parent.add(axes);
+      this._axesHelpers.push(axes);
+    });
   }
 
   /* ════════════════════════════════════════════════════════
@@ -365,44 +404,180 @@ export default class SceneManager {
   _initTargetAndTrail() {
     const s = this._scene;
 
-    // Target sphere
-    this._mTgtS = new THREE.Mesh(
-      new THREE.SphereGeometry(0.018, 20, 20), this._mTgt
+    // Engineering Target Reticle
+    this._targetReticle = new THREE.Group();
+    const axis = new THREE.AxesHelper(0.08);
+    axis.raycast = () => {}; // Prevent accidental dragging via axes
+    this._targetReticle.add(axis);
+    const ringG = new THREE.TorusGeometry(0.04, 0.002, 8, 32);
+    ringG.rotateX(Math.PI/2);
+    const ring = new THREE.Mesh(ringG, this._mTgt);
+    this._targetReticle.add(ring);
+    this._targetReticle.position.set(0.35, 0.018, 0);
+    s.add(this._targetReticle);
+    this._target = this._targetReticle;
+
+    // Glow ring (Interactive hover indicator)
+    const gRingG = new THREE.RingGeometry(0.05, 0.06, 32);
+    gRingG.rotateX(-Math.PI / 2);
+    this._glow = new THREE.Mesh(gRingG, new THREE.MeshBasicMaterial({
+      color: 0x3a96dd, transparent: true, opacity: 0.3, side: THREE.DoubleSide
+    }));
+    this._glow.visible = false;
+    s.add(this._glow);
+
+    // Beam Line
+    const beamG = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)]);
+    this._beamLine = new THREE.LineSegments(beamG, this._mBeam);
+    s.add(this._beamLine);
+
+    // Dynamic Trail (Line-based)
+    const trailG = new THREE.BufferGeometry();
+    const trailPosArr = new Float32Array(TRAIL_N * 3);
+    trailG.setAttribute('position', new THREE.BufferAttribute(trailPosArr, 3));
+    this._trailLine = new THREE.Line(trailG, this._mTrail);
+    s.add(this._trailLine);
+
+    // Manipulability Ellipsoid
+    this._ellipsoid = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 32, 24),
+      new THREE.MeshStandardMaterial({
+        color: 0x00ff80, transparent: true, opacity: 0.35,
+        depthWrite: false, side: THREE.DoubleSide
+      })
     );
-    this._mTgtS.castShadow = true;
-    s.add(this._mTgtS);
+    this._ellipsoid.visible = false;
+    s.add(this._ellipsoid);
 
-    // Glow rings
-    this._glowRings = [0.09, 0.055, 0.028].map((r, i) => {
-      const m = new THREE.Mesh(
-        new THREE.CircleGeometry(r, 36),
-        new THREE.MeshBasicMaterial({
-          color: 0xFFF870, transparent: true,
-          opacity: [0.10, 0.16, 0.26][i],
-          side: THREE.DoubleSide, depthWrite: false
-        })
-      );
-      m.rotation.x = -Math.PI / 2;
-      m.position.y = 0.001;
-      m.renderOrder = 0;
-      s.add(m);
-      return m;
-    });
-
-    // Beam line (created/destroyed per frame)
-    this._beamLine = null;
-
-    // Trail dots
-    this._trailMeshes = Array.from({ length: TRAIL_N }, () => {
-      const m = new THREE.Mesh(
-        new THREE.SphereGeometry(0.006, 6, 6),
-        this._mTrail.clone()
-      );
-      m.visible = false;
-      s.add(m);
-      return m;
-    });
     this._trailIdx = 0;
+  }
+
+  /* ════════════════════════════════════════════════════════
+     Shadow-avoidance demo meshes
+     ════════════════════════════════════════════════════════ */
+  _initShadowDemo() {
+    const s = this._scene;
+    const zTable = 0.025;
+
+    this._workspaceCenter = new THREE.Vector3(0.35, zTable, 0);
+    this._handRadius = 0.048;
+
+    const wsMat = new THREE.MeshStandardMaterial({
+      color: 0x1e5c32,
+      emissive: 0x0d3020,
+      emissiveIntensity: 0.35,
+      roughness: 0.85,
+      metalness: 0.05,
+    });
+    this._workspacePatch = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.24, 0.17),
+      wsMat
+    );
+    this._workspacePatch.rotation.x = -Math.PI / 2;
+    this._workspacePatch.position.copy(this._workspaceCenter).add(V3(0, 0.001, 0));
+    this._workspacePatch.receiveShadow = true;
+    this._workspacePatch.visible = false;
+    s.add(this._workspacePatch);
+
+    const wsBorder = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.PlaneGeometry(0.24, 0.17)),
+      new THREE.LineBasicMaterial({ color: 0x40e080, transparent: true, opacity: 0.85 })
+    );
+    wsBorder.rotation.x = -Math.PI / 2;
+    wsBorder.position.copy(this._workspacePatch.position);
+    wsBorder.visible = false;
+    s.add(wsBorder);
+    this._workspaceBorder = wsBorder;
+
+    const handMat = new THREE.MeshStandardMaterial({
+      color: 0xc4866a,
+      roughness: 0.65,
+      metalness: 0.08,
+    });
+    this._handMesh = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.032, 0.08, 6, 12),
+      handMat
+    );
+    this._handMesh.castShadow = true;
+    this._handMesh.receiveShadow = true;
+    this._handMesh.visible = false;
+    s.add(this._handMesh);
+
+    this._handRobotX = 0.35;
+    this._handRobotY = 0.05;
+    this.setHandTablePosition(this._handRobotX, this._handRobotY);
+
+    this._shadowDemoActive = false;
+    this._savedLight = null;
+  }
+
+  /** Place occluder on table (robot x, robot y on table plane). */
+  setHandTablePosition(xRobot, yRobot) {
+    const zTable = 0.025;
+    this._handRobotX = xRobot;
+    this._handRobotY = yRobot;
+    this._handMesh.position.set(xRobot, zTable + 0.055, -yRobot);
+  }
+
+  getWorkspaceCenter3() {
+    return this._workspaceCenter.clone();
+  }
+
+  /**
+   * Geometric proxy: is the hand near the lamp→workspace ray?
+   * @returns {{ level: 'low'|'high', distance: number, t: number }}
+   */
+  estimateShadowRisk(lampPos, workspacePt, handPos) {
+    const d = this._pointSegmentDistance(handPos, lampPos, workspacePt);
+    const ab = workspacePt.clone().sub(lampPos);
+    const ap = handPos.clone().sub(lampPos);
+    const lenSq = ab.lengthSq();
+    const t = lenSq > 1e-8 ? clamp(ap.dot(ab) / lenSq, 0, 1) : 0;
+    const margin = this._handRadius + 0.025;
+    if (d > margin || t < 0.08 || t > 0.92) {
+      return { level: 'low', distance: d, t };
+    }
+    return { level: 'high', distance: d, t };
+  }
+
+  _pointSegmentDistance(p, a, b) {
+    const ab = b.clone().sub(a);
+    const ap = p.clone().sub(a);
+    const t = clamp(ap.dot(ab) / Math.max(ab.lengthSq(), 1e-8), 0, 1);
+    return p.distanceTo(a.clone().addScaledVector(ab, t));
+  }
+
+  /** Dim studio lights so lamp spot shadows read clearly. */
+  setShadowDemoActive(active) {
+    this._shadowDemoActive = active;
+    if (!this._savedLight && active) {
+      this._savedLight = {
+        dir: this._dirLight.intensity,
+        dirCast: this._dirLight.castShadow,
+        amb: this._ambient.intensity,
+        hemi: this._hemi.intensity,
+        spot: this._spot.intensity,
+      };
+    }
+    if (active) {
+      this._dirLight.intensity = 0.12;
+      this._dirLight.castShadow = false;
+      this._ambient.intensity = 0.1;
+      this._hemi.intensity = 0.06;
+      this._spot.intensity = 5.0;
+      this._spot.angle = 0.48;
+    } else if (this._savedLight) {
+      this._dirLight.intensity = this._savedLight.dir;
+      this._dirLight.castShadow = this._savedLight.dirCast;
+      this._ambient.intensity = this._savedLight.amb;
+      this._hemi.intensity = this._savedLight.hemi;
+      this._spot.intensity = this._savedLight.spot;
+      this._spot.angle = 0.40;
+      this._savedLight = null;
+    }
+    this._handMesh.visible = active;
+    this._workspacePatch.visible = active;
+    this._workspaceBorder.visible = active;
   }
 
   /* ════════════════════════════════════════════════════════
@@ -441,6 +616,9 @@ export default class SceneManager {
     this._mSh.position.copy(P1).add(offV);
     this._mSh.quaternion.setFromUnitVectors(V3(0, 1, 0), sideAx);
 
+    // Shoulder Bracket
+    this.alignCyl(this._mBrak1, P1, P1.clone().add(offV));
+
     // Lower arm
     this.alignCyl(this._mLow, P1.clone().add(offV), P2.clone().add(offV));
 
@@ -454,6 +632,9 @@ export default class SceneManager {
     // Wrist
     this._mWrist.position.copy(P3).add(offV);
     this._mWrist.quaternion.setFromUnitVectors(V3(0, 1, 0), sideAx);
+
+    // Wrist Bracket
+    this.alignCyl(this._mBrak2, P3.clone().add(offV), P3);
 
     // Shade direction
     const shDir = pTgt3 ? pTgt3.clone().sub(P3).normalize() : V3(0, -1, 0);
@@ -477,15 +658,10 @@ export default class SceneManager {
     this._spotTgt.position.copy(pTgt3 || V3(P3.x, 0, P3.z));
     this._lPt.position.copy(P3).addScaledVector(shDir, 0.06);
 
-    // Target sphere + glow rings + beam
+    // Target reticle + beam
     if (pTgt3) {
-      this._mTgtS.visible = true;
-      this._mTgtS.position.copy(pTgt3);
-      this._glowRings.forEach(r => {
-        r.position.x = pTgt3.x;
-        r.position.z = pTgt3.z;
-        r.visible = true;
-      });
+      this._targetReticle.visible = true;
+      this._targetReticle.position.copy(pTgt3);
       if (this._beamLine) {
         this._scene.remove(this._beamLine);
         this._beamLine.geometry.dispose();
@@ -495,8 +671,7 @@ export default class SceneManager {
       this._beamLine.computeLineDistances();
       this._scene.add(this._beamLine);
     } else {
-      this._mTgtS.visible = false;
-      this._glowRings.forEach(r => (r.visible = false));
+      this._targetReticle.visible = false;
       if (this._beamLine) {
         this._scene.remove(this._beamLine);
         this._beamLine.geometry.dispose();
@@ -508,23 +683,33 @@ export default class SceneManager {
   }
 
   /**
-   * Add a trail dot at a given 3D position.
+   * Add a trail point using the line buffer.
    * Call this each simulation frame.
    */
   addTrailPoint(pos3) {
-    const mesh = this._trailMeshes[this._trailIdx % TRAIL_N];
-    mesh.position.copy(pos3);
-    mesh.visible = true;
-    this._trailMeshes.forEach((m, i) => {
-      if (m.visible) m.material.opacity = 0.12 + 0.5 * (i / TRAIL_N);
-    });
+    if (!this._trailLine) return;
+    const posAttr = this._trailLine.geometry.attributes.position;
+    const arr = posAttr.array;
+    // Shift all points back by one
+    for (let i = TRAIL_N - 1; i > 0; i--) {
+      arr[i * 3]     = arr[(i - 1) * 3];
+      arr[i * 3 + 1] = arr[(i - 1) * 3 + 1];
+      arr[i * 3 + 2] = arr[(i - 1) * 3 + 2];
+    }
+    arr[0] = pos3.x; arr[1] = pos3.y; arr[2] = pos3.z;
+    posAttr.needsUpdate = true;
     this._trailIdx++;
+    this._trailLine.geometry.setDrawRange(0, Math.min(this._trailIdx, TRAIL_N));
   }
 
-  /** Reset all trail dots to invisible */
+  /** Reset the trail line buffer */
   resetTrail() {
-    this._trailMeshes.forEach(m => (m.visible = false));
+    if (!this._trailLine) return;
+    const arr = this._trailLine.geometry.attributes.position.array;
+    arr.fill(0);
+    this._trailLine.geometry.attributes.position.needsUpdate = true;
     this._trailIdx = 0;
+    this._trailLine.geometry.setDrawRange(0, 0);
   }
 
   /**
@@ -551,76 +736,123 @@ export default class SceneManager {
   }
 
   /* ════════════════════════════════════════════════════════
-     Getters — for UI Controller (Part 4) to attach events
+     Engineering View Controls
      ════════════════════════════════════════════════════════ */
 
-  /** Main Three.js camera */
-  get camera() { return this._camera; }
+  /** Highlight a specific link mesh */
+  highlightLink(index) {
+    this.clearHighlight();
+    const entry = this.linkMeshes[index];
+    if (entry) {
+      entry.mesh._oldMat = entry.mesh.material;
+      entry.mesh.material = this._mHighlightMat;
+    }
+  }
 
-  /** The Three.js scene */
-  get scene() { return this._scene; }
+  /** Clear any active highlights */
+  clearHighlight() {
+    this.linkMeshes.forEach(l => {
+      if (l.mesh._oldMat) {
+        l.mesh.material = l.mesh._oldMat;
+        delete l.mesh._oldMat;
+      }
+    });
+  }
 
-  /** The WebGLRenderer (for raycaster bounds) */
-  get renderer() { return this._renderer; }
+  /** Toggle wireframe mode for all robot meshes */
+  setWireframe(enabled) {
+    this._scene.traverse(obj => {
+      if (obj.isMesh && obj.material && obj !== this._mBulb) {
+        obj.material.wireframe = enabled;
+      }
+    });
+  }
 
-  /** OrbitControls instance (to disable during drag) */
-  get controls() { return this._controls; }
+  /** Toggle joint coordinate frames */
+  setAxesVisible(enabled) {
+    this._axesHelpers.forEach(ah => ah.visible = enabled);
+  }
 
-  /** Target sphere mesh (for raycaster hit-testing) */
-  get targetSphere() { return this._mTgtS; }
+  /** Change camera projection mode */
+  setCameraMode(isOrtho) {
+    // Note: To keep it simple, we use a single Perspective camera 
+    // with a very narrow FOV for "pseudo-ortho" or we could swap.
+    // For now, let's just adjust FOV or add logic if needed.
+    if (isOrtho) {
+      this._camera.fov = 15;
+      this._camera.position.multiplyScalar(2);
+    } else {
+      this._camera.fov = 44;
+      this._camera.position.set(1.0, 0.95, 1.0);
+    }
+    this._camera.updateProjectionMatrix();
+  }
 
-  /** Table-surface drag plane (for raycaster intersection) */
-  get dragPlane() { return this._dragPlane; }
-
-  /** Trail dot count constant */
-  get TRAIL_N() { return TRAIL_N; }
-
-  /** Clickable link mesh entries (array) */
-  get linkMeshes() { return this._linkMeshes; }
-
-  /** Just the Three.js mesh objects for raycasting */
-  get linkMeshArray() { return this._linkMeshes.map(e => e.mesh); }
-
-  /* ═══════════ Link Resizing ═══════════ */
-
-  /**
-   * Dynamically resize a link's cylinder geometry.
-   * @param {number} index - Link index (0=L1, 1=L2, 2=L3)
-   * @param {number} newLen - New length in meters
-   */
+  /** Dynamically resize a link and its geometry */
   resizeLink(index, newLen) {
-    const entry = this._linkMeshes[index];
+    const entry = this.linkMeshes[index];
     if (!entry) return;
     const [r1, r2] = entry.radius;
     entry.mesh.geometry.dispose();
     entry.mesh.geometry = new THREE.CylinderGeometry(r1, r2, newLen, 16);
-    // Update the mutable kinematics config
+    // Update kinematic constant
     linkLengths[entry.key] = newLen;
   }
 
-  /**
-   * Highlight a link with emissive glow.
-   * @param {number} index - Link index to highlight (-1 = clear)
-   */
+  /** Highlight a specific link mesh */
   highlightLink(index) {
-    // Clear previous highlight
     this.clearHighlight();
-    if (index < 0 || index >= this._linkMeshes.length) return;
-    const mat = this._linkMeshes[index].mesh.material;
-    this._savedEmissive = mat.emissive.getHex();
-    this._savedEmissiveIntensity = mat.emissiveIntensity;
-    mat.emissive.setHex(0x00e5ff);
-    mat.emissiveIntensity = 0.6;
-    this._highlightedLink = index;
+    const entry = this.linkMeshes[index];
+    if (entry) {
+      entry.mesh._oldMat = entry.mesh.material;
+      entry.mesh.material = this._mHighlightMat;
+    }
   }
 
-  /** Clear link highlight */
+  /** Clear any active highlights */
   clearHighlight() {
-    if (this._highlightedLink >= 0 && this._highlightedLink < this._linkMeshes.length) {
-      const mat = this._linkMeshes[this._highlightedLink].mesh.material;
-      mat.emissive.setHex(this._savedEmissive || 0x000000);
-      mat.emissiveIntensity = this._savedEmissiveIntensity || 0;
-    }
-    this._highlightedLink = -1;
+    this.linkMeshes.forEach(l => {
+      if (l.mesh._oldMat) {
+        l.mesh.material = l.mesh._oldMat;
+        delete l.mesh._oldMat;
+      }
+    });
   }
+
+  /**
+   * Update the Manipulability Ellipsoid at the End Effector.
+   * @param {boolean} visible
+   * @param {number[]} singularValues - Axes lengths
+   * @param {THREE.Matrix4} rotation - Orientation matrix
+   * @param {number} mu - Manipulability index
+   * @param {THREE.Vector3} pos - Position at EE
+   */
+  updateEllipsoid(visible, singularValues, rotation, mu, pos) {
+    if (!this._ellipsoid) return;
+    this._ellipsoid.visible = visible;
+    if (!visible) return;
+
+    this._ellipsoid.position.copy(pos);
+    const s = singularValues.map(v => Math.max(v * 0.25, 0.001));
+    this._ellipsoid.scale.set(s[0], s[1], s[2]);
+    if (rotation) this._ellipsoid.setRotationFromMatrix(rotation);
+    
+    // Green (High Mu) -> Red (Singular)
+    const normMu = Math.min(mu * 50.0, 1.0);
+    this._ellipsoid.material.color.setHSL(0.35 * normMu, 1.0, 0.5);
+  }
+
+  /* ════════════════════════════════════════════════════════
+     Getters
+     ════════════════════════════════════════════════════════ */
+
+  get camera() { return this._camera; }
+  get scene() { return this._scene; }
+  get renderer() { return this._renderer; }
+  get controls() { return this._controls; }
+  get targetSphere() { return this._targetReticle; }
+  get dragPlane() { return this._dragPlane; }
+  get TRAIL_N() { return TRAIL_N; }
+  get handMesh() { return this._handMesh; }
+  get workspacePatch() { return this._workspacePatch; }
 }

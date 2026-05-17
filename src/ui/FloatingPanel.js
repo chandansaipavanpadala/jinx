@@ -239,3 +239,96 @@ export function createPanelToolbar(panels, container) {
   container.appendChild(toolbar);
   return toolbar;
 }
+
+/**
+ * Utility: Convert hardcoded layout panels into floating modular panels
+ * @returns {FloatingPanel[]} The created modular panels
+ */
+export function makePanelsModular(cw) {
+  const panels = [];
+  const topToolbar = document.getElementById('toolbar');
+  
+  // Helper to add a toggle button to the main toolbar
+  const addToggleBtn = (panel, label) => {
+    if (!topToolbar) return;
+    const btn = document.createElement('button');
+    btn.className = 'toolbar-btn active';
+    btn.textContent = label;
+    btn.addEventListener('click', () => {
+      panel.toggle();
+      btn.classList.toggle('active', panel.isVisible);
+    });
+    // Insert before the flex:1 spacer if it exists, otherwise at the end
+    const spacer = Array.from(topToolbar.children).find(el => el.style.flex === '1 1 0%' || el.style.flex === '1');
+    if (spacer) {
+      topToolbar.insertBefore(btn, spacer);
+    } else {
+      topToolbar.appendChild(btn);
+    }
+  };
+  const hierarchy = document.getElementById('hierarchy');
+  if (hierarchy) {
+    hierarchy.classList.remove('sidebar', 'sidebar-left');
+    const header = hierarchy.querySelector('.sidebar-section-header');
+    if (header) header.style.display = 'none';
+    hierarchy.style.width = '240px';
+    hierarchy.style.maxHeight = '60vh';
+    hierarchy.style.overflowY = 'auto';
+    // Let the inner sections breathe
+    hierarchy.style.paddingTop = '0px';
+    
+    const fp = new FloatingPanel({
+      id: 'fp-hierarchy',
+      title: 'SCENE HIERARCHY',
+      icon: '⛒',
+      contentEl: hierarchy,
+      startX: 20,
+      startY: 60
+    });
+    fp.mount(cw);
+    panels.push(fp);
+    addToggleBtn(fp, 'HIERARCHY');
+  }
+
+  const inspector = document.getElementById('inspector');
+  if (inspector) {
+    inspector.classList.remove('sidebar', 'sidebar-right');
+    inspector.style.width = '280px';
+    inspector.style.maxHeight = '70vh';
+    inspector.style.overflowY = 'auto';
+    const fp = new FloatingPanel({
+      id: 'fp-inspector',
+      title: 'INSPECTOR',
+      icon: '⚙',
+      contentEl: inspector,
+      startX: Math.max(window.innerWidth - 320, 20),
+      startY: 60
+    });
+    fp.mount(cw);
+    panels.push(fp);
+    addToggleBtn(fp, 'INSPECTOR');
+  }
+
+  const consoleBody = document.getElementById('consoleBody');
+  if (consoleBody) {
+    consoleBody.style.width = '600px';
+    consoleBody.style.height = '180px';
+    consoleBody.style.background = 'transparent';
+    consoleBody.style.border = 'none';
+    
+    const fp = new FloatingPanel({
+      id: 'fp-console',
+      title: 'SYSTEM TERMINAL',
+      icon: '💻',
+      contentEl: consoleBody,
+      startX: 20,
+      startY: Math.max(window.innerHeight - 260, 60),
+      startCollapsed: false
+    });
+    fp.mount(cw);
+    panels.push(fp);
+    addToggleBtn(fp, 'TERMINAL');
+  }
+  
+  return panels;
+}

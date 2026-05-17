@@ -5,10 +5,13 @@
 import * as THREE from 'three';
 import {
   ikMat, fkMat, jacMat, det3, clamp, RAD, V3, DEG,
-  T2MIN, T2MAX, T3MIN, T3MAX, linkLengths
+  T2MIN, T2MAX, T3MIN, T3MAX, linkLengths, getEllipsoid
 } from '../math/Kinematics.js';
 import { trapProfile } from '../math/Trajectory.js';
 import { projectPixelsTo3D, transformCameraToRobot } from '../math/CameraModel.js';
+import { logger } from './ConsoleLogger.js';
+import MathDashboardPanel from './MathDashboardPanel.js';
+import { makePanelsModular } from './FloatingPanel.js';
 
 const $ = id => document.getElementById(id);
 
@@ -32,6 +35,14 @@ export default class UIController {
     this._raycaster = new THREE.Raycaster();
     this._mouse = new THREE.Vector2();
     this._isDragging = false;
+    this._isDraggingHand = false;
+    this._shadowHandManual = false;
+    // Shadow-avoidance demo
+    this.shadowDemoRunning = false;
+    this.shadowDemoRAF = null;
+    this.shadowSimT = 0;
+    this._handX = 0.35;
+    this._handY = 0.05;
     // Link selection
     this._selectedLink = -1;
     this._linkCard = $('linkCard');
@@ -41,6 +52,8 @@ export default class UIController {
     this._linkMin = $('linkCardMin');
     this._linkMax = $('linkCardMax');
     this._linkDefault = $('linkCardDefault');
+    // Math Dashboard Panel
+    this._mathPanel = null;
     // BroadcastChannel for math dashboard sync
     this._mathChannel = new BroadcastChannel('jinx_math_sync');
     // Command channel — receive FK/IK commands from dashboard
@@ -49,26 +62,50 @@ export default class UIController {
       const d = e.data;
       if (d.robot !== 'rrr') return;
       if (d.type === 'fk' && d.q) {
-        // d.q is in radians — set the IK target sliders to match
         const RAD2DEG = 180 / Math.PI;
-        $('xd').value = 0; $('yd').value = 0;
-        // Direct scene update with the received joint angles
         const fv = fkMat(d.q[0], d.q[1], d.q[2]);
-        const pTgt3 = V3(fv.x, 0.025, -fv.y);
+        const zhand = 0.025;
+        const pTgt3 = V3(fv.x, zhand, -fv.y);
         this.sm.updateScene(d.q[0], d.q[1], d.q[2], pTgt3);
-        // Update HUD
+        this.qCurrent = [...d.q];
+        $('xd').value = fv.x;
+        $('yd').value = fv.y;
+        $('dz').value = fv.z - zhand;
         $('h1').textContent = (d.q[0] * RAD2DEG).toFixed(1) + '°';
         $('h2').textContent = (d.q[1] * RAD2DEG).toFixed(1) + '°';
         $('h3').textContent = (d.q[2] * RAD2DEG).toFixed(1) + '°';
         $('hHead').textContent = `(${fv.x.toFixed(3)}, ${fv.y.toFixed(3)}, ${fv.z.toFixed(3)}) m`;
-      } else if (d.type === 'ik' && d.target) {
-        $('xd').value = d.target[0];
-        $('yd').value = d.target[1];
         this.update();
+      } else if (d.type === 'ik' && d.target) {
+        const zhand = 0.025;
+        const dx = +$('dx').value;
+        const dy = +$('dy').value;
+        $('xd').value = d.target[0] - dx;
+        $('yd').value = d.target[1] - dy;
+        $('dz').value = d.target[2] - zhand;
+        if (d.elbow !== undefined) $('elbow').value = d.elbow > 0 ? '1' : '-1';
+        this.setTab('ik');
+        this.update();
+      } else if (d.type === 'jog_joint' && d.joint !== undefined) {
+        const q = [...(this.qCurrent || [0, DEG(45), DEG(80)])];
+        q[d.joint] += d.delta;
+        this._cmdChannel.onmessage({ data: { robot: 'rrr', type: 'fk', q } });
+      } else if (d.type === 'jog_ee' && d.delta) {
+        $('xd').value = (+$('xd').value) + d.delta[0];
+        $('yd').value = (+$('yd').value) + d.delta[1];
+        $('dz').value = (+$('dz').value) + d.delta[2];
+        this.setTab('ik');
+        this.update();
+      } else if (d.type === 'home') {
+        this._resetPose();
+      } else if (d.type === 'toggle_sim') {
+        this.toggleSim();
       }
     };
     this._bindEvents();
     this._bindLinkCard();
+    makePanelsModular($('cw'));
+    logger.log('UIController initialized.');
   }
 
   /* ═══════════ Event Wiring ═══════════ */
@@ -101,9 +138,38 @@ export default class UIController {
     });
     // Sim button
     $('sbtn').addEventListener('click', () => this.toggleSim());
+    const shadowBtn = $('shadowDemoBtn');
+    if (shadowBtn) shadowBtn.addEventListener('click', () => this.toggleShadowDemo());
+    const shadowAvoid = $('shadowAvoid');
+    if (shadowAvoid) shadowAvoid.addEventListener('change', () => {
+      if (this.shadowDemoRunning) this._updateShadowHudLabels();
+      else this.update();
+    });
+    ['shadowSpd', 'shadowHR', 'dx', 'dy', 'dz'].forEach(id => {
+      const el = $(id);
+      if (el) el.addEventListener('input', () => {
+        if (id === 'dx' || id === 'dy' || id === 'dz') {
+          $('dxv').textContent = (+$('dx').value).toFixed(2);
+          $('dyv').textContent = (+$('dy').value).toFixed(2);
+          $('dzv').textContent = (+$('dz').value).toFixed(2);
+        }
+        if (this.shadowDemoRunning) return;
+        if (id.startsWith('shadow')) return;
+        this.update();
+      });
+    });
     // Math dashboard
     const mathBtn = $('btn-math-panel');
-    if (mathBtn) mathBtn.addEventListener('click', () => window.open('math-dashboard.html?robot=rrr', '_blank'));
+    if (mathBtn) mathBtn.addEventListener('click', () => {
+      if (!this._mathPanel) {
+        this._mathPanel = new MathDashboardPanel({
+          mountRoot: document.getElementById('cw'),
+          robotType: 'rrr'
+        });
+      }
+      this._mathPanel.toggle();
+      mathBtn.classList.toggle('active', this._mathPanel.isVisible);
+    });
     // Camera apply
     $('camApplyBtn').addEventListener('click', () => this.applyCameraIK());
     // Raycaster
@@ -114,12 +180,75 @@ export default class UIController {
     // Reset
     const resetBtn = $('resetBtn');
     if (resetBtn) resetBtn.addEventListener('click', () => this._resetPose());
+
+    // Hierarchy bindings
+    document.querySelectorAll('.tree-item[data-link]').forEach(el => {
+      el.addEventListener('click', () => {
+        const linkIdx = parseInt(el.dataset.link, 10);
+        this.showLinkCard(linkIdx);
+      });
+    });
+    
+    // Toolbar - Camera Modes
+    const bOrbit = $('btn-orbit'), bPan = $('btn-pan');
+    if (bOrbit && bPan) {
+      bOrbit.addEventListener('click', () => {
+        this.sm.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+        bOrbit.classList.add('active'); bPan.classList.remove('active');
+      });
+      bPan.addEventListener('click', () => {
+        this.sm.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+        bPan.classList.add('active'); bOrbit.classList.remove('active');
+      });
+    }
+
+    // Toolbar - View Modes
+    const bWire = $('btn-wireframe'), bFrames = $('btn-frames'), bEll = $('btn-ellipsoid');
+    if (bWire) bWire.addEventListener('click', () => {
+      const active = bWire.classList.toggle('active');
+      this.sm.setWireframe(active);
+    });
+    if (bFrames) bFrames.addEventListener('click', () => {
+      const active = bFrames.classList.toggle('active');
+      this.sm.setAxesVisible(active);
+    });
+    if (bEll) bEll.addEventListener('click', () => {
+      bEll.classList.toggle('active');
+      this.update();
+    });
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', e => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+      
+      switch(e.code) {
+        case 'Space': e.preventDefault(); this.toggleSim(); break;
+        case 'KeyR': this._resetPose(); break;
+        case 'KeyW': if (bWire) bWire.click(); break;
+        case 'KeyF': if (bFrames) bFrames.click(); break;
+        case 'KeyG': // Grid toggle
+          const active = this.sm.scene.getObjectByName('majorGrid')?.visible;
+          this.sm.scene.traverse(o => {
+            if (o.type === 'GridHelper') o.visible = !active;
+          });
+          break;
+      }
+    });
+
+    // Global click to deselect link
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.tree-item') && !e.target.closest('#linkCard') && !e.target.closest('canvas')) {
+        this.hideLinkCard();
+      }
+    });
   }
 
   /* ═══════════ Reset Pose ═══════════ */
   _resetPose() {
+    logger.info('Resetting to home pose.');
     // Stop simulation
     if (this.simRunning) this.toggleSim();
+    if (this.shadowDemoRunning) this.toggleShadowDemo();
     // Reset to default
     const defaultQ = [0, DEG(45), DEG(80)];
     this.qCurrent = [...defaultQ];
@@ -173,6 +302,10 @@ export default class UIController {
 
     $('ikAlert').classList.toggle('on', !sol && tab === 'ik');
     if (!sol) {
+      if (this._lastStatus !== 'unreachable') {
+        logger.error('IK Diverged: Target out of reach.');
+        this._lastStatus = 'unreachable';
+      }
       $('hStat').textContent = 'Unreachable';
       $('hStat').className = 'bad';
       return;
@@ -186,6 +319,14 @@ export default class UIController {
     $('limAlert').classList.toggle('on', !limOk && tab === 'ik');
     $('hStat').textContent = limOk ? '✓ Valid' : '⚠ Limit';
     $('hStat').className = limOk ? 'ok' : 'bad';
+    
+    if (!limOk && this._lastStatus !== 'limit') {
+      logger.warn('Joint limits reached.');
+      this._lastStatus = 'limit';
+    } else if (limOk && this._lastStatus !== 'valid') {
+      if (this._lastStatus) logger.log('Valid pose restored.');
+      this._lastStatus = 'valid';
+    }
 
     const fv = fkMat(t1, t2, t3);
     const err = Math.hypot(fv.x - pdx, fv.y - pdy, fv.z - pdz);
@@ -205,12 +346,43 @@ export default class UIController {
     const pTgt3 = V3(xd, zhand, -yd);
     const f = this.sm.updateScene(t1, t2, t3, pTgt3);
 
+    // Manipulability Ellipsoid (Phase 4.2)
+    const bEll = $('btn-ellipsoid');
+    const ellOn = bEll && bEll.classList.contains('active');
+    if (ellOn) {
+      const { singularValues, rotation } = getEllipsoid(J);
+      this.sm.updateEllipsoid(true, singularValues, rotation, mu, f.P3);
+    } else {
+      this.sm.updateEllipsoid(false);
+    }
+
     // HUD
     $('h1').textContent = RAD(t1).toFixed(1) + '°';
     $('h2').textContent = RAD(t2).toFixed(1) + '°';
     $('h3').textContent = RAD(t3).toFixed(1) + '°';
-    $('hHead').textContent = `(${f.x.toFixed(3)}, ${f.y.toFixed(3)}, ${f.z.toFixed(3)}) m`;
-    $('hMu').textContent = mu.toFixed(5);
+    $('hHead').textContent = `[${f.x.toFixed(3)}, ${f.y.toFixed(3)}, ${f.z.toFixed(3)}]`;
+    $('hMu').textContent = mu.toFixed(4);
+
+    // Status Bar Telemetry
+    const fpsEl = $('status-fps');
+    if (fpsEl) {
+      if (!this._frameCount) this._frameCount = 0;
+      this._frameCount++;
+      if (this._frameCount % 30 === 0) {
+        const now = performance.now();
+        if (this._lastTime) {
+          const dt = now - this._lastTime;
+          const fps = Math.round(1000 / (dt / 30));
+          fpsEl.textContent = fps;
+        }
+        this._lastTime = now;
+      }
+    }
+
+    // Hierarchy Tree Badges
+    const tt1 = $('tree-t1'); if(tt1) tt1.textContent = RAD(t1).toFixed(1) + '°';
+    const tt2 = $('tree-t2'); if(tt2) tt2.textContent = RAD(t2).toFixed(1) + '°';
+    const tt3 = $('tree-t3'); if(tt3) tt3.textContent = RAD(t3).toFixed(1) + '°';
     // EE cards
     $('ox').textContent = f.x.toFixed(4) + ' m';
     $('oy').textContent = f.y.toFixed(4) + ' m';
@@ -232,7 +404,10 @@ export default class UIController {
         reach: f.r,
         error: err,
         converged: !!sol,
-        status: limOk ? 'valid' : 'limit'
+        status: limOk ? 'valid' : 'limit',
+        sdot: this.simRunning ? parseFloat($('simSdot')?.textContent) || 0 : 0,
+        sddot: this.simRunning ? parseFloat($('simSddot')?.textContent) || 0 : 0,
+        mode: this.simRunning ? 'simulation' : this._tab,
       });
     }
   }
@@ -267,6 +442,13 @@ export default class UIController {
     $('muLabel').textContent = 'μ = ' + mu.toFixed(5);
     $('singWarn').style.display = Math.abs(Math.sin(t3)) < 0.10 ? 'block' : 'none';
     $('singWarn2').style.display = Math.abs(f.r) < 0.04 ? 'block' : 'none';
+
+    if (mu < 0.005 && this._lastSingularity !== true) {
+      logger.warn(`Approaching singularity (μ = ${mu.toFixed(4)})`);
+      this._lastSingularity = true;
+    } else if (mu >= 0.005 && this._lastSingularity === true) {
+      this._lastSingularity = false;
+    }
   }
 
   /* ═══════════ Camera Pinhole ═══════════ */
@@ -376,14 +558,17 @@ export default class UIController {
 
   /* ═══════════ Simulation ═══════════ */
   toggleSim() {
+    if (this.shadowDemoRunning) this.toggleShadowDemo();
     this.simRunning = !this.simRunning;
     const btn = $('sbtn');
     if (this.simRunning) {
+      logger.info('Simulation started.');
       btn.textContent = '⏹  Stop Simulation'; btn.classList.add('stop');
       $('simStats').style.display = 'block';
       this.trailBuf = []; this.sm.resetTrail(); this.trapT = 0;
       this._runSim();
     } else {
+      logger.log('Simulation stopped.');
       btn.textContent = '▶  Play Simulation'; btn.classList.remove('stop');
       cancelAnimationFrame(this.simRAF);
     }
@@ -399,69 +584,199 @@ export default class UIController {
     $('amaxv').textContent = amax_.toFixed(2);
 
     const dt = 0.016 * spd;
-    this.simT += dt; this.simN++;
+    this.simT += dt;
+    this.simN++;
 
     const dx = +$('dx').value, dy = +$('dy').value, dz = +$('dz').value;
-    const xH = clamp(0.25 + hR_ * 0.5 * Math.cos(this.simT), 0.05, 0.45);
-    const yH = clamp(0.08 * Math.sin(this.simT), -0.15, 0.15);
+    const xH = clamp(0.25 + hR_ * Math.cos(this.simT), 0.05, 0.50);
+    const yH = clamp(hR_ * Math.sin(this.simT), -0.30, 0.30);
     const zH = 0.025;
     const pdx = xH + dx, pdy = yH + dy, pdz = zH + dz;
 
     const solNew = ikMat(pdx, pdy, pdz, 1);
     if (solNew) {
-      const newQ = [solNew.t1, clamp(solNew.t2, T2MIN, T2MAX), clamp(solNew.t3, T3MIN, T3MAX)];
-      const maxDelta = Math.max(...newQ.map((q, i) => Math.abs(q - this.qCurrent[i])));
-      if (maxDelta > 0.005) {
-        this.trapTTotal = Math.max(maxDelta / vmax_ * 1.5, 2 * Math.sqrt(maxDelta / amax_), 0.04);
-        this.qTarget = [...newQ]; this.trapT = 0;
-      }
-      this.trapT += dt;
-      const { s, sdot, sddot, phase } = trapProfile(this.trapT, this.trapTTotal, vmax_, amax_);
-      const t1 = this.qCurrent[0] + s * (this.qTarget[0] - this.qCurrent[0]);
-      const t2 = this.qCurrent[1] + s * (this.qTarget[1] - this.qCurrent[1]);
-      const t3 = this.qCurrent[2] + s * (this.qTarget[2] - this.qCurrent[2]);
-      if (this.trapT >= this.trapTTotal) { this.qCurrent = [...this.qTarget]; this.trapT = this.trapTTotal; }
+      const t1 = solNew.t1;
+      const t2 = clamp(solNew.t2, T2MIN, T2MAX);
+      const t3 = clamp(solNew.t3, T3MIN, T3MAX);
+      this.qCurrent = [t1, t2, t3];
+
+      const J = jacMat(t1, t2, t3);
+      const mu = Math.abs(det3(J));
+      const fv = fkMat(t1, t2, t3);
+      const err = Math.hypot(fv.x - pdx, fv.y - pdy, fv.z - pdz);
 
       const pTgt3 = V3(xH, zH, -yH);
-      this.sm.updateScene(t1, t2, t3, pTgt3);
+      const f = this.sm.updateScene(t1, t2, t3, pTgt3);
       this.sm.addTrailPoint(pTgt3);
+
+      // Manipulability Ellipsoid
+      const bEll = $('btn-ellipsoid');
+      if (bEll && bEll.classList.contains('active')) {
+        const { singularValues, rotation } = getEllipsoid(J);
+        this.sm.updateEllipsoid(true, singularValues, rotation, mu, f.P3);
+      } else {
+        this.sm.updateEllipsoid(false);
+      }
 
       this.trailBuf.push({ x: xH, y: yH });
       if (this.trailBuf.length > this.sm.TRAIL_N) this.trailBuf.shift();
       this.drawTraj();
 
-      const fv = fkMat(t1, t2, t3);
-      const err = Math.hypot(fv.x - pdx, fv.y - pdy, fv.z - pdz);
-      const J = jacMat(t1, t2, t3), mu = Math.abs(det3(J));
-      const lim = solNew.t2 < T2MIN - 0.01 || solNew.t2 > T2MAX + 0.01 || solNew.t3 < T3MIN - 0.01 || solNew.t3 > T3MAX + 0.01;
-      $('simF').textContent = (this.simN % 9999) + (lim ? ' [LIM]' : '');
-      $('simE').textContent = (err * 1e9).toExponential(2) + ' nm';
-      $('simT2').textContent = RAD(t2).toFixed(1) + '°';
-      $('simMu').textContent = mu.toFixed(4);
-      $('simPhase').textContent = phase;
-      $('simS').textContent = s.toFixed(4);
-      $('simSdot').textContent = sdot.toFixed(3);
-      $('simSddot').textContent = sddot.toFixed(2);
+      const lim = solNew.t2 < T2MIN - 0.01 || solNew.t2 > T2MAX + 0.01
+               || solNew.t3 < T3MIN - 0.01 || solNew.t3 > T3MAX + 0.01;
+      $('simF').textContent    = (this.simN % 9999) + (lim ? ' [LIM]' : '');
+      $('simE').textContent    = (err * 1e9).toExponential(2) + ' nm';
+      $('simT2').textContent   = RAD(t2).toFixed(1) + '°';
+      $('simMu').textContent   = mu.toFixed(4);
+      $('simPhase').textContent = 'TRACKING';
+      $('simS').textContent    = '1.0000';
+      $('simSdot').textContent = '0.000';
+      $('simSddot').textContent = '0.00';
       this.drawTrapProfile();
 
-      // ── Broadcast to Math Dashboard during simulation (throttled) ──
+      // Broadcast to Math Dashboard (throttled)
+      this._frameCount++;
+      if (this._frameCount % 2 === 0) {
+        this._mathChannel.postMessage({
+          robot: 'rrr', q: [t1, t2, t3],
+          ee: [fv.x, fv.y, fv.z], jacobian: J, mu,
+          detJ: det3(J), reach: fv.r, error: err,
+          converged: true, status: 'simulating'
+        });
+      }
+    }
+    // RAF must always be called — loop must never die
+    this.simRAF = requestAnimationFrame(() => this._runSim());
+  }
+
+  /* ═══════════ Shadow Avoidance Demo ═══════════ */
+  toggleShadowDemo() {
+    this.shadowDemoRunning = !this.shadowDemoRunning;
+    const btn = $('shadowDemoBtn');
+    const hud = $('shadowHud');
+    if (this.shadowDemoRunning) {
+      if (this.simRunning) this.toggleSim();
+      logger.info('Shadow avoidance demo started.');
+      this.sm.setShadowDemoActive(true);
+      this.shadowSimT = 0;
+      this._shadowHandManual = false;
+      btn?.classList.add('active');
+      if (btn) btn.textContent = 'STOP SHADOW DEMO';
+      hud?.classList.add('visible');
+      this._updateShadowHudLabels();
+      this._runShadowDemo();
+    } else {
+      logger.log('Shadow avoidance demo stopped.');
+      cancelAnimationFrame(this.shadowDemoRAF);
+      this.sm.setShadowDemoActive(false);
+      btn?.classList.remove('active');
+      if (btn) btn.textContent = 'SHADOW DEMO';
+      hud?.classList.remove('visible');
+      this.update();
+    }
+  }
+
+  _updateShadowHudLabels() {
+    const on = $('shadowAvoid')?.checked ?? true;
+    const modeEl = $('shadowMode');
+    if (modeEl) {
+      modeEl.textContent = on ? 'OFFSET (p_d = p_t + Δ)' : 'DIRECT (p_d = p_t)';
+      modeEl.className = on ? 'hud-value ok' : 'hud-value bad';
+    }
+  }
+
+  _runShadowDemo() {
+    if (!this.shadowDemoRunning) return;
+
+    const zhand = 0.025;
+    const avoidance = $('shadowAvoid')?.checked ?? true;
+    const dx = +$('dx').value;
+    const dy = +$('dy').value;
+    const dz = +$('dz').value;
+    const spd = +($('shadowSpd')?.value ?? $('spd')?.value ?? 1);
+    const hR_ = +($('shadowHR')?.value ?? 0.10);
+
+    $('shadowSpdv').textContent = spd.toFixed(1) + '×';
+    $('shadowHRv').textContent = hR_.toFixed(2) + ' m';
+
+    if (!this._shadowHandManual) {
+      const dt = 0.016 * spd;
+      this.shadowSimT += dt;
+      this._handX = clamp(0.35 + hR_ * Math.cos(this.shadowSimT), 0.12, 0.58);
+      this._handY = clamp(hR_ * Math.sin(this.shadowSimT), -0.22, 0.22);
+    }
+
+    const xH = this._handX;
+    const yH = this._handY;
+    this.sm.setHandTablePosition(xH, yH);
+
+    let pdx, pdy, pdz;
+    if (avoidance) {
+      pdx = xH + dx;
+      pdy = yH + dy;
+      pdz = zhand + dz;
+    } else {
+      pdx = xH;
+      pdy = yH;
+      pdz = zhand + 0.08;
+    }
+
+    const pTgt3 = V3(xH, zhand, -yH);
+    const wsPt = this.sm.getWorkspaceCenter3();
+    const sol = ikMat(pdx, pdy, pdz, 1);
+
+    if (sol) {
+      const t1 = sol.t1;
+      const t2 = clamp(sol.t2, T2MIN, T2MAX);
+      const t3 = clamp(sol.t3, T3MIN, T3MAX);
+      const fv = fkMat(t1, t2, t3);
+      const err = Math.hypot(fv.x - pdx, fv.y - pdy, fv.z - pdz);
+      this.sm.updateScene(t1, t2, t3, pTgt3);
+
+      const lampPos = fv.P3;
+      const handPos3 = this.sm.handMesh.position;
+      const risk = this.sm.estimateShadowRisk(lampPos, wsPt, handPos3);
+
+      $('h1').textContent = RAD(t1).toFixed(1) + '°';
+      $('h2').textContent = RAD(t2).toFixed(1) + '°';
+      $('h3').textContent = RAD(t3).toFixed(1) + '°';
+      $('hHead').textContent = `[${fv.x.toFixed(3)}, ${fv.y.toFixed(3)}, ${fv.z.toFixed(3)}]`;
+      $('hStat').textContent = avoidance ? 'SHADOW AVOID' : 'DIRECT LAMP';
+      $('hStat').className = avoidance ? 'ok' : 'bad';
+
+      const pt = $('shadowPt');
+      if (pt) pt.textContent = `(${xH.toFixed(2)}, ${yH.toFixed(2)})`;
+      const pd = $('shadowPd');
+      if (pd) pd.textContent = `(${pdx.toFixed(2)}, ${pdy.toFixed(2)}, ${pdz.toFixed(2)})`;
+      const riskEl = $('shadowRisk');
+      if (riskEl) {
+        const blocked = risk.level === 'high';
+        riskEl.textContent = blocked ? 'LIKELY ON DESK' : 'CLEAR / OFFSET';
+        riskEl.className = blocked ? 'hud-value bad' : 'hud-value ok';
+      }
+      const errEl = $('shadowIkErr');
+      if (errEl) errEl.textContent = (err * 1e3).toFixed(2) + ' mm';
+
+      this._updateShadowHudLabels();
+
       this._frameCount++;
       if (this._frameCount % 2 === 0) {
         this._mathChannel.postMessage({
           robot: 'rrr',
           q: [t1, t2, t3],
           ee: [fv.x, fv.y, fv.z],
-          jacobian: J,
-          mu,
-          detJ: det3(J),
-          reach: fv.r,
           error: err,
           converged: true,
-          status: 'simulating'
+          status: 'shadow_demo',
+          mode: avoidance ? 'shadow_avoid' : 'shadow_direct',
         });
       }
+    } else {
+      $('hStat').textContent = 'IK FAIL';
+      $('hStat').className = 'bad';
     }
-    this.simRAF = requestAnimationFrame(() => this._runSim());
+
+    this.shadowDemoRAF = requestAnimationFrame(() => this._runShadowDemo());
   }
 
   /* ═══════════ Raycaster ═══════════ */
@@ -483,8 +798,21 @@ export default class UIController {
       }
     }
 
+    if (this.sm.handMesh?.visible) {
+      const handHits = this._raycaster.intersectObject(this.sm.handMesh, false);
+      if (handHits.length > 0) {
+        this._isDraggingHand = true;
+        this._shadowHandManual = true;
+        this.sm.controls.enabled = false;
+        document.body.style.cursor = 'grabbing';
+        return;
+      }
+    }
+
     // ── Check target sphere (existing drag logic) ──
-    if (this._raycaster.intersectObject(this.sm.targetSphere).length > 0) {
+    // Require Shift for dragging the target to prioritize OrbitControls
+    const tgtHits = this._raycaster.intersectObject(this.sm.targetSphere, true);
+    if (e.shiftKey && tgtHits.length > 0) {
       this._isDragging = true;
       this.sm.controls.enabled = false;
       document.body.style.cursor = 'grabbing';
@@ -495,6 +823,23 @@ export default class UIController {
     this.hideLinkCard();
   }
   _onPointerMove(e) {
+    if (this._isDraggingHand) {
+      const rect = this.sm.renderer.domElement.getBoundingClientRect();
+      this._mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this._mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this._raycaster.setFromCamera(this._mouse, this.sm.camera);
+      const pt = new THREE.Vector3();
+      if (this._raycaster.ray.intersectPlane(this.sm.dragPlane, pt)) {
+        this._handX = clamp(pt.x, 0.12, 0.58);
+        this._handY = clamp(-pt.z, -0.22, 0.22);
+        this.sm.setHandTablePosition(this._handX, this._handY);
+        if (this.shadowDemoRunning) return;
+        $('xd').value = this._handX;
+        $('yd').value = this._handY;
+        this.update();
+      }
+      return;
+    }
     if (!this._isDragging) return;
     const rect = this.sm.renderer.domElement.getBoundingClientRect();
     this._mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -510,6 +855,7 @@ export default class UIController {
   }
   _onPointerUp() {
     this._isDragging = false;
+    this._isDraggingHand = false;
     this.sm.controls.enabled = true;
     document.body.style.cursor = 'default';
   }
@@ -525,6 +871,13 @@ export default class UIController {
       const newLen = parseFloat(this._linkSlider.value);
       this.sm.resizeLink(this._selectedLink, newLen);
       this._linkValue.textContent = newLen.toFixed(3) + ' m';
+      
+      // Debounced logger
+      clearTimeout(this._resizeLogTimer);
+      this._resizeLogTimer = setTimeout(() => {
+        logger.log(`Link ${this._selectedLink} resized to ${newLen.toFixed(3)} m`);
+      }, 500);
+
       // Re-run FK to update the 3D arm
       this.update();
     });

@@ -1,88 +1,186 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>6-DOF Welding Robot — JINX Simulator</title>
-  <meta name="description"
-    content="6-DOF Anthropomorphic Welding Robot: DLS IK, Jacobian analysis, automated weld seam tracing.">
+  <title>6-DOF Welding Robot Workspace — JINX Simulator</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
+  <script type="module" src="../auth/workspace-guard.js"></script>
 </head>
-
-<body>
-  <div class="layout">
-
-      <!-- Header -->
-      <div class="hbar">
-        <a href="../../index.html" class="back-btn">← Home</a>
-        <div>
-        <div class="htitle">6-DOF Welding Robot<span class="badge">3D Simulator</span></div>
-        <div class="hsub">Damped Least-Squares IK · 6×N Jacobian · Automated Weld Seam · N-DOF Engine</div>
-      </div>
+<body data-workspace="welder">
+  <div class="workstation">
+    
+    <!-- TOOLBAR -->
+    <div class="toolbar" id="toolbar">
+      <div class="toolbar-title">JINX // 6-DOF ANTHROPOMORPHIC</div>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn active" id="btn-orbit">ORBIT</button>
+      <button class="toolbar-btn" id="btn-pan">PAN</button>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn" id="btn-wireframe">WIREFRAME</button>
+      <button class="toolbar-btn" id="btn-frames">FRAMES</button>
+      <button class="toolbar-btn" id="btn-ellipsoid">DIAGNOSTICS</button>
+      <button class="toolbar-btn" id="btn-math-panel">MATH DASHBOARD</button>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn primary" id="btn-weld">RUN TASK</button>
+      <button class="toolbar-btn" id="btn-waypoints">WAYPOINTS</button>
+      <button class="toolbar-btn" id="btn-reset">RESET POSE</button>
+      <div style="flex:1"></div>
+      <a href="../../index.html" class="toolbar-btn">LAUNCHER</a>
     </div>
 
-    <div class="body-row">
-
-      <!-- 3D Canvas (now takes full width) -->
-      <div id="cw">
-        <div class="hud" id="hud">
-          <div><b>θ₁</b> <span id="hud-q1">—</span>&ensp;<b>θ₂</b> <span id="hud-q2">—</span>&ensp;<b>θ₃</b> <span
-              id="hud-q3">—</span></div>
-          <div><b>θ₄</b> <span id="hud-q4">—</span>&ensp;<b>θ₅</b> <span id="hud-q5">—</span>&ensp;<b>θ₆</b> <span
-              id="hud-q6">—</span></div>
-          <div><b>EE</b> <span id="hHead">—</span></div>
-          <div><b>Status</b> <span id="hStat" class="ok">—</span></div>
-        </div>
-        <div class="cam-hint">Drag to orbit · Scroll to zoom · Right-drag to pan</div>
-
-        <!-- ═══ Minimal Control Bar ═══ -->
-        <div class="sim-control-bar" id="simControlBar">
-          <button class="sim-btn sim-btn-primary" id="btn-weld">▶ Start Welding</button>
-          <button class="sim-btn sim-btn-secondary" id="btn-math-panel">📐 Open Math Panel</button>
-          <button class="sim-btn sim-btn-ghost" id="btn-waypoints">📍 Waypoints</button>
-          <button class="sim-btn sim-btn-ghost" id="btn-reset">⟲ Reset</button>
-        </div>
-
-        <!-- ═══ Link Detail Card (hidden by default) ═══ -->
-        <div class="link-card" id="linkCard">
-          <div class="link-card-header">
-            <span class="link-card-icon">🔗</span>
-            <span class="link-card-title" id="linkCardTitle">Link</span>
-            <button class="link-card-close" id="linkCardClose">✕</button>
+    <!-- WORKSPACE -->
+    <div class="workspace">
+      
+      <!-- HIERARCHY PANEL (Left) -->
+      <aside class="sidebar sidebar-left" id="hierarchy">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">SCENE HIERARCHY</div>
+          <div class="sidebar-section-body" style="padding: 0;">
+            <div class="tree-item"><span class="tree-icon">⛒</span> WORLD ORIGIN</div>
+            <div class="tree-item" data-link="0"><span class="tree-icon">⚙</span> JOINT 1 <span class="badge" id="tree-t1">0.00°</span></div>
+            <div class="tree-item" data-link="1"><span class="tree-icon">🔗</span> LINK 1</div>
+            <div class="tree-item" data-link="1"><span class="tree-icon">⚙</span> JOINT 2 <span class="badge" id="tree-t2">0.00°</span></div>
+            <div class="tree-item" data-link="2"><span class="tree-icon">🔗</span> LINK 2</div>
+            <div class="tree-item" data-link="2"><span class="tree-icon">⚙</span> JOINT 3 <span class="badge" id="tree-t3">0.00°</span></div>
+            <div class="tree-item" data-link="3"><span class="tree-icon">⚙</span> JOINT 4 <span class="badge" id="tree-t4">0.00°</span></div>
+            <div class="tree-item" data-link="4"><span class="tree-icon">⚙</span> JOINT 5 <span class="badge" id="tree-t5">0.00°</span></div>
+            <div class="tree-item" data-link="5"><span class="tree-icon">⚙</span> JOINT 6 <span class="badge" id="tree-t6">0.00°</span></div>
+            <div class="tree-item active"><span class="tree-icon">🎯</span> WELDER TOOL</div>
           </div>
-          <div class="link-card-body">
-            <div class="link-card-readout">
-              <span class="link-card-label">Length</span>
-              <span class="link-card-value" id="linkCardValue">0.000 m</span>
+        </div>
+      </aside>
+
+      <!-- 3D VIEWPORT -->
+      <div class="viewport" id="cw">
+        
+        <!-- HUD Overlay (Engineering Card) -->
+        <div class="hud-card" id="hud">
+          <div class="hud-row"><span class="hud-label">FPS</span><span class="hud-value">60</span></div>
+          <div style="height:4px; border-bottom:1px solid var(--border); margin-bottom:4px;"></div>
+          <div class="hud-row"><span class="hud-label">J1-J3</span><span class="hud-value" id="hud-q123">0, 0, 0</span></div>
+          <div class="hud-row"><span class="hud-label">J4-J6</span><span class="hud-value" id="hud-q456">0, 0, 0</span></div>
+          <div style="height:4px; border-bottom:1px solid var(--border); margin-bottom:4px; margin-top:2px;"></div>
+          <div class="hud-row"><span class="hud-label">POSITION</span><span class="hud-value" id="hHead">[0, 0, 0]</span></div>
+          <div class="hud-row"><span class="hud-label">STATUS</span><span class="hud-value ok" id="hStat">READY</span></div>
+        </div>
+        
+        <div class="cam-hint">Drag to orbit · Scroll to zoom · Right-drag to pan</div>
+        
+        <!-- Context Popup (Link Resizer) -->
+        <div class="context-popup" id="linkCard">
+          <div class="context-header">
+            <span id="linkCardTitle">Link</span>
+            <button class="context-close" id="linkCardClose">✕</button>
+          </div>
+          <div class="context-body">
+            <div class="inspector-row">
+              <span class="inspector-label">Length</span>
+              <span class="inspector-value" id="linkCardValue">0.000 m</span>
             </div>
-            <input type="range" class="link-card-slider" id="linkCardSlider" min="0.05" max="0.50" value="0.30" step="0.005">
-            <div class="link-card-range">
+            <input type="range" class="eng-slider" id="linkCardSlider" min="0.05" max="0.50" value="0.30" step="0.005">
+            <div class="inspector-row" style="font-size: 10px; color: var(--text-dim);">
               <span id="linkCardMin">0.05</span>
-              <span class="link-card-default" id="linkCardDefault">default: 0.30 m</span>
+              <span id="linkCardDefault">default: 0.30 m</span>
               <span id="linkCardMax">0.50</span>
             </div>
-            <button class="link-card-reset" id="linkCardReset">⟲ Reset to Default</button>
+            <button class="toolbar-btn" style="width:100%; border:1px solid var(--border);" id="linkCardReset">Reset Default</button>
           </div>
         </div>
       </div>
 
+      <!-- INSPECTOR PANEL (Right) -->
+      <aside class="sidebar sidebar-right" id="inspector">
+        
+        <!-- FK Params -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">Forward Kinematics (Joints)</div>
+          <div class="sidebar-section-body">
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">θ₁</span>
+                <span class="inspector-value" id="val-t1">0</span>
+              </div>
+              <input type="range" class="eng-slider" id="t1" min="-180" max="180" value="0" step="1">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">θ₂</span>
+                <span class="inspector-value" id="val-t2">0</span>
+              </div>
+              <input type="range" class="eng-slider" id="t2" min="-90" max="90" value="0" step="1">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">θ₃</span>
+                <span class="inspector-value" id="val-t3">0</span>
+              </div>
+              <input type="range" class="eng-slider" id="t3" min="-150" max="150" value="0" step="1">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">θ₄</span>
+                <span class="inspector-value" id="val-t4">0</span>
+              </div>
+              <input type="range" class="eng-slider" id="t4" min="-180" max="180" value="0" step="1">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">θ₅</span>
+                <span class="inspector-value" id="val-t5">0</span>
+              </div>
+              <input type="range" class="eng-slider" id="t5" min="-120" max="120" value="0" step="1">
+            </div>
+            <div class="field-group">
+              <div class="inspector-row">
+                <span class="inspector-label">θ₆</span>
+                <span class="inspector-value" id="val-t6">0</span>
+              </div>
+              <input type="range" class="eng-slider" id="t6" min="-360" max="360" value="0" step="1">
+            </div>
+          </div>
+        </div>
+
+      </aside>
+
     </div>
+
+    <!-- TERMINAL -->
+    <div class="console" id="consoleBody">
+      <div class="log-entry">
+        <span class="log-time">[00:00:00.000]</span>
+        <span class="log-tag info">SYSTEM</span>
+        <span class="log-msg">JINX WORKSTATION INITIALIZED // WELDER CORE READY</span>
+      </div>
+    </div>
+
+    <!-- STATUS BAR (Bottom) -->
+    <footer class="status-bar">
+      <div class="status-item">
+        <span class="status-accent">●</span> SYSTEM READY
+      </div>
+      <div class="status-sep"></div>
+      <div class="status-item">
+        DEVICE: <span class="status-accent">JX-WELDER-03</span>
+      </div>
+      <div class="status-sep"></div>
+      <div class="status-item">
+        DOF: <span class="status-accent">6-AXIS</span>
+      </div>
+      <div style="flex:1"></div>
+      <div class="status-item">
+        FPS: <span class="status-accent" id="status-fps">60</span>
+      </div>
+    </footer>
+
   </div>
 
-  <!-- Hidden elements needed by WelderUIController (preserved to avoid null refs) -->
+  <!-- Hidden elements to keep WelderUIController.js happy without modifying it in Phase 1 -->
   <div style="display:none">
     <div id="tabBar"></div>
     <div id="pane-fk"></div><div id="pane-jac"></div><div id="pane-sim"></div><div id="pane-tasks"></div>
-    <input type="range" id="t1" value="0"><input type="range" id="t2" value="0">
-    <input type="range" id="t3" value="0"><input type="range" id="t4" value="0">
-    <input type="range" id="t5" value="0"><input type="range" id="t6" value="0">
-    <span id="val-t1"></span><span id="val-t2"></span><span id="val-t3"></span>
-    <span id="val-t4"></span><span id="val-t5"></span><span id="val-t6"></span>
     <span id="val-x"></span><span id="val-y"></span><span id="val-z"></span>
     <div id="jac-grid"></div>
     <span id="val-det"></span><span id="val-mu"></span><div id="singularity-warn"></div>
@@ -93,5 +191,4 @@
 
   <script type="module" src="/src/welder-main.js"></script>
 </body>
-
 </html>
