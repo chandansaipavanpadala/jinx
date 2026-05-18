@@ -46,11 +46,6 @@ Waypoint paths, welding task execution, and spark effects.
 
 ![6-DOF welder workspace](docs/screenshots/06-welder-workspace.png)
 
-### Math dashboard
-
-Cross-tab FK / IK / Jacobian analytics with Chart.js telemetry (synced via `BroadcastChannel`).
-
-![Math dashboard for SCARA](docs/screenshots/07-math-dashboard.png)
 
 ---
 
