@@ -72,7 +72,7 @@ function applyMode(isSetup) {
     fieldConfirmPassword.style.display = 'none';
     loginOptions.style.display = '';
     cardFooter.innerHTML =
-      'Don\'t have an account? <a href="#" class="login-link" id="setup-link">Contact your administrator</a>.';
+      'Don\'t have an account? <a href="#" class="login-link" id="setup-link">Create your profile</a>.';
     bindSetupLink();
     passwordInput.autocomplete = 'current-password';
   }
@@ -81,10 +81,10 @@ function applyMode(isSetup) {
 function bindSetupLink() {
   const link = document.getElementById('setup-link');
   if (!link) return;
-  link.textContent = AuthService.needsSetup() ? 'Create your profile' : 'Contact your administrator';
+  link.textContent = 'Create your profile';
   link.addEventListener('click', (e) => {
     e.preventDefault();
-    if (AuthService.needsSetup()) applyMode(true);
+    applyMode(true);
   });
 }
 
