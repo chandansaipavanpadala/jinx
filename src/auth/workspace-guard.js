@@ -1,5 +1,5 @@
 import { requireAuth } from './authGuard.js';
-import { showFullscreenHintIfNeeded } from '../ui/FullscreenHint.js';
+import { showFullscreenHintIfNeeded, restoreFullscreenIfRequested } from '../ui/FullscreenHint.js';
 import { getDatabase } from '../database/index.js';
 
 function recordWorkspaceVisit() {
@@ -14,5 +14,6 @@ function recordWorkspaceVisit() {
 
 if (requireAuth()) {
   recordWorkspaceVisit();
+  restoreFullscreenIfRequested();
   showFullscreenHintIfNeeded({ delayMs: 1000 });
 }

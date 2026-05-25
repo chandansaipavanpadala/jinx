@@ -26,6 +26,37 @@ export async function requestFullscreen() {
   }
 }
 
+/** Call this just before navigating away while fullscreen. */
+export function saveFullscreenState() {
+  try {
+    if (isFullscreen()) {
+      sessionStorage.setItem('jinx_restore_fullscreen', '1');
+    } else {
+      sessionStorage.removeItem('jinx_restore_fullscreen');
+    }
+  } catch { /* ignore */ }
+}
+
+/**
+ * Call this on the next page load.
+ * If the user was fullscreen on the previous page, re-enters fullscreen
+ * automatically (browsers allow this if called quickly after a user gesture
+ * that triggered the navigation).
+ */
+export function restoreFullscreenIfRequested() {
+  try {
+    const flag = sessionStorage.getItem('jinx_restore_fullscreen');
+    if (!flag) return;
+    sessionStorage.removeItem('jinx_restore_fullscreen');
+    // Re-enter fullscreen as soon as the page is interactive.
+    // We use a small delay so the page has time to paint first.
+    setTimeout(async () => {
+      if (isFullscreen()) return; // already in fullscreen somehow
+      await requestFullscreen();
+    }, 200);
+  } catch { /* ignore */ }
+}
+
 function injectStyles() {
   if (document.getElementById('jinx-fullscreen-hint-styles')) return;
   const style = document.createElement('style');

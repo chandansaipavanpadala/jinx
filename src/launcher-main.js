@@ -1,9 +1,10 @@
-﻿/**
+/**
  * Launcher entry — auth UI + database-backed workspace navigation.
  */
 import './launcher-auth.js';
 import { getDatabase } from './database/index.js';
 import { resolveAppPath } from './config/appConfig.js';
+import { saveFullscreenState } from './ui/FullscreenHint.js';
 
 function assetUrl(path) {
   const p = path.startsWith('/') ? path.slice(1) : path;
@@ -20,7 +21,10 @@ function initWorkspaceNavigation() {
     const ws = byId[id];
     if (!ws) return;
     card.setAttribute('href', ws.href);
-    card.addEventListener('click', () => db.workspaces.recordVisit(id));
+    card.addEventListener('click', () => {
+      db.workspaces.recordVisit(id);
+      saveFullscreenState();
+    });
   });
 
   const tableBody = document.querySelector('#recent-workspaces-tbody');
@@ -37,6 +41,7 @@ function initWorkspaceNavigation() {
         tr.addEventListener('click', (e) => {
           if (!e.target.closest('.table-actions')) {
             db.workspaces.recordVisit(id);
+            saveFullscreenState();
             window.location.href = ws.href;
           }
         });
@@ -51,6 +56,7 @@ function initWorkspaceNavigation() {
     if (id && byId[id]) {
       e.preventDefault();
       db.workspaces.recordVisit(id);
+      saveFullscreenState();
       window.location.href = byId[id].href;
     }
   });
@@ -77,6 +83,7 @@ function renderRecentTable(tbody, recent, byId, db) {
       <td><div class="table-actions"><span aria-hidden="true">&gt;</span></div></td>`;
     const open = () => {
       db.workspaces.recordVisit(ws.id);
+      saveFullscreenState();
       window.location.href = ws.href;
     };
     tr.addEventListener('click', (e) => {
