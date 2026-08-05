@@ -5,7 +5,7 @@ kinematics, Jacobian analysis, singularity detection, and task-space trajectory
 planning. Built with Three.js, vanilla JavaScript, and Vite.
 
 **Live demo (GitHub Pages):**  
-[https://chandansaipavanpadala.github.io/JINX-Joint_Inverse_N-dimensional_eXplorer/](https://chandansaipavanpadala.github.io/JINX-Joint_Inverse_N-dimensional_eXplorer/)
+[https://chandansaipavanpadala.github.io/jinx/](https://chandansaipavanpadala.github.io/jinx/)
 
 | Demo sign-in (hosted build) | |
 |---|---|
@@ -213,7 +213,7 @@ Open from a workspace toolbar (**MATH DASHBOARD**) or directly:
 ## Directory Structure
 
 ```
-JINX-Joint_Inverse_N-dimensional_eXplorer/
+jinx/
 ├── index.html                  Workspace launcher (auth required)
 ├── login.html                  Sign-in / profile setup
 ├── docs/screenshots/           README images
@@ -246,8 +246,8 @@ JINX-Joint_Inverse_N-dimensional_eXplorer/
 ### Installation
 
 ```bash
-git clone https://github.com/chandansaipavanpadala/JINX-Joint_Inverse_N-dimensional_eXplorer.git
-cd JINX-Joint_Inverse_N-dimensional_eXplorer
+git clone https://github.com/chandansaipavanpadala/jinx.git
+cd jinx
 npm install
 ```
 
@@ -259,7 +259,7 @@ npm run dev
 
 Open the URL printed by Vite (includes the repo base path), e.g.:
 
-`http://localhost:5173/JINX-Joint_Inverse_N-dimensional_eXplorer/`
+`http://localhost:5173/jinx/`
 
 Sign in with the credentials from `.env.development` (default: `admin@jinx.local` / `Jinx@2026`).
 
@@ -279,7 +279,7 @@ The project deploys via `.github/workflows/static.yml` on pushes to `main`.
 1. Enable **GitHub Pages** → source: **GitHub Actions**.
 2. Push to `main`; the workflow runs `npm run build` and publishes `dist/`.
 3. Visit  
-   `https://<username>.github.io/JINX-Joint_Inverse_N-dimensional_eXplorer/`
+   `https://<username>.github.io/jinx/`
 
 **Sign-in on Pages:** use the demo account in the table at the top, or choose **Create your profile** on first visit (data stays in that browser only).
 
