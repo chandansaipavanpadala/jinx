@@ -29,10 +29,18 @@ export const RAD = (v) => v * 180 / Math.PI;
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 /* ═══════════════════ Joint Limits ═══════════════════ */
+/** Yaw soft limits used in paper / MATLAB (UI currently does not clamp θ1). */
+export const T1MIN = DEG(-170);
+export const T1MAX = DEG(170);
 export const T2MIN = DEG(15);
 export const T2MAX = DEG(115);
 export const T3MIN = DEG(20);
 export const T3MAX = DEG(145);
+
+/** Default occlusion offset Δ (synced with rrr-lamp.html + Lamp_Kinematics.m). */
+export const DEFAULT_DELTA = Object.freeze({ dx: -0.10, dy: 0.05, dz: 0.45 });
+/** Desk hand height (m) used when lifting the lamp target above the table. */
+export const Z_HAND = 0.025;
 
 /**
  * Forward Kinematics — DH closed-form

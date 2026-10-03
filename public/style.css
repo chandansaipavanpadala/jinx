@@ -54,6 +54,16 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+body[data-workspace="rrr"] {
+  display: flex;
+}
+
+body[data-workspace="rrr"] > .workstation {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
 /* ============================================================
    WORKSTATION LAYOUT
    ============================================================ */
